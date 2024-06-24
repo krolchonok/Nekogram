@@ -135,7 +135,14 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                 ItemOptions.makeOptions(this, view)
                         .setScrimViewBackground(new ColorDrawable(getThemedColor(Theme.key_windowBackgroundWhite)))
                         .add(R.drawable.msg_copy, LocaleController.getString(R.string.CopyLink), () -> {
-                            AndroidUtilities.addToClipboard(String.format(Locale.getDefault(), "https://%s/nekosettings/%s?r=%s", getMessagesController().linkPrefix, getKey(), rowMapReverse.get(position)));
+                            var rowKey = rowMapReverse.get(position);
+                            if ("copyReportId".equals(rowKey)) {
+                                AndroidUtilities.addToClipboard(String.format(Locale.getDefault(), "https://%s/nekosettings/%s", getMessagesController().linkPrefix, "reportId"));
+                            } else if ("checkUpdate".equals(rowKey)) {
+                                AndroidUtilities.addToClipboard(String.format(Locale.getDefault(), "https://%s/nekosettings/%s", getMessagesController().linkPrefix, "update"));
+                            } else {
+                                AndroidUtilities.addToClipboard(String.format(Locale.getDefault(), "https://%s/nekosettings/%s?r=%s", getMessagesController().linkPrefix, getKey(), rowKey));
+                            }
                             BulletinFactory.of(BaseNekoSettingsActivity.this).createCopyLinkBulletin().show();
                         })
                         .setMinWidth(190)
@@ -217,13 +224,17 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
         }
 
         @Override
-        protected void drawList(Canvas blurCanvas, boolean top) {
+        protected void drawList(Canvas blurCanvas, boolean top, ArrayList<IViewWithInvalidateCallback> views) {
+            super.drawList(blurCanvas, top, views);
             for (int j = 0; j < listView.getChildCount(); j++) {
                 View child = listView.getChildAt(j);
                 if (child.getY() < listView.blurTopPadding + AndroidUtilities.dp(100)) {
                     int restore = blurCanvas.save();
                     blurCanvas.translate(getX() + child.getX(), getY() + listView.getY() + child.getY());
                     child.draw(blurCanvas);
+                    if (views != null && child instanceof SizeNotifierFrameLayout.IViewWithInvalidateCallback) {
+                        views.add((SizeNotifierFrameLayout.IViewWithInvalidateCallback) child);
+                    }
                     blurCanvas.restoreToCount(restore);
                 }
             }
@@ -342,19 +353,23 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
             return type == TYPE_SETTINGS || type == TYPE_CHECK || type == TYPE_NOTIFICATION_CHECK || type == TYPE_DETAIL_SETTINGS || type == TYPE_TEXT | type == TYPE_CHECKBOX || type == TYPE_RADIO || type == TYPE_ACCOUNT || type == TYPE_EMOJI || type == TYPE_EMOJI_SELECTION || type == TYPE_CREATION;
         }
 
-        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position, boolean partial) {
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position, boolean partial, boolean divider) {
 
         }
 
         @Override
         public final void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-            boolean top = position > 0;
-            boolean bottom = position < getItemCount() - 1;
-            if (holder.getItemViewType() == TYPE_SHADOW) {
+            var partial = PARTIAL.equals(holder.getPayload());
+            var top = position > 0;
+            var bottom = position < getItemCount() - 1;
+            var type = holder.getItemViewType();
+            var nextType = position < getItemCount() - 1 ? getItemViewType(position + 1) : -1;
+            var divider = nextType != -1 && nextType != TYPE_SHADOW && nextType != TYPE_INFO_PRIVACY;
+            if (type == TYPE_SHADOW) {
                 ShadowSectionCell shadowCell = (ShadowSectionCell) holder.itemView;
                 shadowCell.setTopBottom(top, bottom);
                 return;
-            } else if (holder.getItemViewType() == TYPE_INFO_PRIVACY) {
+            } else if (type == TYPE_INFO_PRIVACY) {
                 TextInfoPrivacyCell cell = (TextInfoPrivacyCell) holder.itemView;
                 int drawable;
                 if (top && bottom) {
@@ -368,8 +383,7 @@ public abstract class BaseNekoSettingsActivity extends BaseFragment {
                 }
                 cell.setBackground(Theme.getThemedDrawable(mContext, drawable, getThemedColor(Theme.key_windowBackgroundGrayShadow)));
             }
-            var payload = holder.getPayload();
-            onBindViewHolder(holder, position, PARTIAL.equals(payload));
+            onBindViewHolder(holder, position, partial, divider);
         }
 
         @NonNull

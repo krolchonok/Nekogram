@@ -17,6 +17,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.opengl.GLES11Ext;
@@ -607,7 +608,7 @@ public class BlurringShader {
         }
 
         public Bitmap getBitmap(Bitmap bitmap, String key, int orientation, int invert, boolean recycleAfter) {
-            if (bitmap == null) {
+            if (bitmap == null || bitmap.isRecycled()) {
                 return null;
             }
             if (TextUtils.equals(thumbKey, key)) {
@@ -622,6 +623,9 @@ public class BlurringShader {
             }
             thumbKey = key;
             Utilities.globalQueue.postRunnable(generate = () -> {
+                if (bitmap == null || bitmap.isRecycled()) {
+                    return;
+                }
                 final float aspectRatio = bitmap.getWidth() / (float) bitmap.getHeight();
                 final float scale = 1.5f;
                 final float density = 9 * scale * 16 * scale;
@@ -710,6 +714,9 @@ public class BlurringShader {
         private final BlurManager manager;
         private final View view;
 
+        public RenderNode renderNode;
+        public final ColorMatrix colorMatrix;
+
         private boolean animateBitmapChange;
         private boolean oldPaintSet;
         private float oldPaintAlpha;
@@ -728,7 +735,7 @@ public class BlurringShader {
             this.type = type;
             this.animateBitmapChange = animateBitmapChange;
 
-            final ColorMatrix colorMatrix = new ColorMatrix();
+            colorMatrix = new ColorMatrix();
             if (type == BLUR_TYPE_BACKGROUND) {
                 AndroidUtilities.adjustSaturationColorMatrix(colorMatrix, +.45f);
             } else if (type == BLUR_TYPE_MENU_BACKGROUND) {

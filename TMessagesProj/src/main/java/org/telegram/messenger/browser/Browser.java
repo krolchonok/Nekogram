@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 
 import tw.nekomimi.nekogram.NekoConfig;
+import tw.nekomimi.nekogram.helpers.WebpageHelper;
 
 public class Browser {
 
@@ -222,7 +223,7 @@ public class Browser {
                 String token = "autologin_token=" + URLEncoder.encode(AccountInstance.getInstance(UserConfig.selectedAccount).getMessagesController().autologinToken, "UTF-8");
                 String url = uri.toString();
                 int idx = url.indexOf("://");
-                String path = idx >= 0 ? url.substring(idx + 3) : url;
+                String path = idx >= 0 && idx <= 5 && !url.substring(0, idx).contains(".") ? url.substring(idx + 3) : url;
                 String fragment = uri.getEncodedFragment();
                 String finalPath = fragment == null ? path : path.substring(0, path.indexOf("#" + fragment));
                 if (finalPath.indexOf('?') >= 0) {
@@ -235,6 +236,7 @@ public class Browser {
                 }
                 uri = Uri.parse("https://" + finalPath);
             }
+            uri = WebpageHelper.toNormalUrl(host, uri);
             if (allowCustom && SharedConfig.customTabs && !internalUri && !scheme.equals("tel")) {
                 if (MessagesController.getInstance(currentAccount).authDomains.contains(host)) {
                     Intent intent = new Intent(Intent.ACTION_VIEW, uri);

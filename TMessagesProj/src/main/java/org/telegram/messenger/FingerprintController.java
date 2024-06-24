@@ -8,6 +8,7 @@ import android.security.keystore.KeyPermanentlyInvalidatedException;
 import android.security.keystore.KeyProperties;
 
 import androidx.annotation.RequiresApi;
+import androidx.biometric.BiometricManager;
 
 import java.security.InvalidAlgorithmParameterException;
 import java.security.KeyPairGenerator;
@@ -16,8 +17,6 @@ import java.security.KeyStoreException;
 import java.util.Locale;
 
 import javax.crypto.Cipher;
-
-import tw.nekomimi.nekogram.helpers.BiometricPromptHelper;
 
 @RequiresApi(api = Build.VERSION_CODES.M)
 public class FingerprintController {
@@ -89,7 +88,7 @@ public class FingerprintController {
         KeyStore keyStore = getKeyStore();
         try {
             keyStore.deleteEntry(KEY_ALIAS);
-        } catch (Throwable e) {
+        } catch (KeyStoreException e) {
             FileLog.e(e);
         }
         hasChangedFingerprints = null;
@@ -102,7 +101,7 @@ public class FingerprintController {
     }
 
     public static void checkKeyReady(boolean notifyCheckFingerprint) {
-        if (!isKeyReady() && AndroidUtilities.isKeyguardSecure() && BiometricPromptHelper.hasBiometricEnrolled()) {
+        if (!isKeyReady() && AndroidUtilities.isKeyguardSecure() && BiometricManager.from(ApplicationLoader.applicationContext).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS) {
             Utilities.globalQueue.postRunnable(() -> generateNewKey(notifyCheckFingerprint));
         }
     }

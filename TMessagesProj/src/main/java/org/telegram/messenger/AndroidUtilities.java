@@ -27,6 +27,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
 import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -43,6 +44,9 @@ import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.fonts.Font;
+import android.graphics.fonts.FontFamily;
+import android.graphics.fonts.SystemFonts;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -70,6 +74,7 @@ import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
 import android.text.style.CharacterStyle;
 import android.text.style.ClickableSpan;
+import android.text.style.DynamicDrawableSpan;
 import android.text.style.URLSpan;
 import android.text.util.Linkify;
 import android.util.DisplayMetrics;
@@ -79,6 +84,7 @@ import android.util.StateSet;
 import android.util.TypedValue;
 import android.view.Display;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.PixelCopy;
 import android.view.Surface;
@@ -113,7 +119,9 @@ import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.graphics.TypefaceCompatUtil;
 import androidx.core.math.MathUtils;
+import androidx.core.provider.FontRequest;
 import androidx.core.widget.NestedScrollView;
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
@@ -146,6 +154,7 @@ import org.telegram.ui.ChatBackgroundDrawable;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.BackgroundGradientDrawable;
 import org.telegram.ui.Components.Bulletin;
+import org.telegram.ui.Components.ColoredImageSpan;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.EllipsizeSpanAnimator;
 import org.telegram.ui.Components.ForegroundColorSpanThemable;
@@ -155,8 +164,6 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.MotionBackgroundDrawable;
 import org.telegram.ui.Components.PickerBottomLayout;
 import org.telegram.ui.Components.PipRoundVideoView;
-import org.telegram.ui.Components.PipVideoOverlay;
-import org.telegram.ui.Components.RLottieImageView;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.ShareAlert;
 import org.telegram.ui.Components.TypefaceSpan;
@@ -202,7 +209,13 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -217,12 +230,37 @@ public class AndroidUtilities {
     public final static int REPLACING_TAG_TYPE_LINK = 0;
     public final static int REPLACING_TAG_TYPE_BOLD = 1;
     public final static int REPLACING_TAG_TYPE_LINKBOLD = 2;
+    public final static int REPLACING_TAG_TYPE_LINK_NBSP = 3;
 
     public final static String TYPEFACE_ROBOTO_MEDIUM = "fonts/rmedium.ttf";
     public final static String TYPEFACE_ROBOTO_MEDIUM_ITALIC = "fonts/rmediumitalic.ttf";
     public final static String TYPEFACE_ROBOTO_MONO = "fonts/rmono.ttf";
     public final static String TYPEFACE_MERRIWEATHER_BOLD = "fonts/mw_bold.ttf";
     public final static String TYPEFACE_COURIER_NEW_BOLD = "fonts/courier_new_bold.ttf";
+
+    private static Typeface mediumTypeface;
+    public static Typeface bold() {
+        if (mediumTypeface == null) {
+            // so system Roboto with 500 weight doesn't support Hebrew (but 700 Roboto does)
+            // there must be a way to take system font 500 and fallback it with system font 700
+            // I haven't found the way, even through private API :(
+//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+//                mediumTypeface = Typeface.create(null, 500, false);
+//
+//                final String text = "Sample text";
+//                final TextPaint normalPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+//                final TextPaint mediumPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+//                mediumPaint.setTypeface(mediumTypeface);
+//                if (Math.abs(normalPaint.measureText(text) - mediumPaint.measureText(text)) < 0.1f) {
+//                    mediumTypeface = Typeface.create(null, 700, false);
+//                }
+//            }
+            if (mediumTypeface == null) {
+                mediumTypeface = getTypeface(TYPEFACE_ROBOTO_MEDIUM);
+            }
+        }
+        return mediumTypeface;
+    }
 
     private static final Hashtable<String, Typeface> typefaceCache = new Hashtable<>();
     public static float touchSlop;
@@ -262,9 +300,11 @@ public class AndroidUtilities {
 
     public static final RectF rectTmp = new RectF();
     public static final Rect rectTmp2 = new Rect();
+    public static final int[] pointTmp2 = new int[2];
 
     public static Pattern WEB_URL = null;
     public static Pattern BAD_CHARS_PATTERN = null;
+    public static Pattern LONG_BAD_CHARS_PATTERN = null;
     public static Pattern BAD_CHARS_MESSAGE_PATTERN = null;
     public static Pattern BAD_CHARS_MESSAGE_LONG_PATTERN = null;
     private static Pattern singleTagPatter = null;
@@ -273,6 +313,7 @@ public class AndroidUtilities {
         try {
             final String GOOD_IRI_CHAR = "a-zA-Z0-9\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF";
             BAD_CHARS_PATTERN = Pattern.compile("[\u2500-\u25ff]");
+            LONG_BAD_CHARS_PATTERN = Pattern.compile("[\u4e00-\u9fff]");
             BAD_CHARS_MESSAGE_LONG_PATTERN = Pattern.compile("[\u0300-\u036f\u2066-\u2067]+");
             BAD_CHARS_MESSAGE_PATTERN = Pattern.compile("[\u2066-\u2067]+");
             final Pattern IP_ADDRESS = Pattern.compile(
@@ -486,7 +527,10 @@ public class AndroidUtilities {
         }
         SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder(str);
         if (index >= 0) {
-            if (type == REPLACING_TAG_TYPE_LINK || type == REPLACING_TAG_TYPE_LINKBOLD) {
+            if (type == REPLACING_TAG_TYPE_LINK_NBSP) {
+                spannableStringBuilder.replace(index, index + len, AndroidUtilities.replaceMultipleCharSequence(" ", spannableStringBuilder.subSequence(index, index + len), " "));
+            }
+            if (type == REPLACING_TAG_TYPE_LINK || type == REPLACING_TAG_TYPE_LINK_NBSP || type == REPLACING_TAG_TYPE_LINKBOLD) {
                 spannableStringBuilder.setSpan(new ClickableSpan() {
 
                     @Override
@@ -497,7 +541,7 @@ public class AndroidUtilities {
                             ds.setColor(Theme.getColor(colorKey, resourcesProvider));
                         }
                         if (type == REPLACING_TAG_TYPE_LINKBOLD) {
-                            ds.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM));
+                            ds.setTypeface(AndroidUtilities.bold());
                         }
                     }
 
@@ -512,7 +556,7 @@ public class AndroidUtilities {
                 spannableStringBuilder.setSpan(new CharacterStyle() {
                     @Override
                     public void updateDrawState(TextPaint textPaint) {
-                        textPaint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+                        textPaint.setTypeface(AndroidUtilities.bold());
                         int wasAlpha = textPaint.getAlpha();
                         textPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText, resourcesProvider));
                         textPaint.setAlpha(wasAlpha);
@@ -556,6 +600,47 @@ public class AndroidUtilities {
             }, index, index + len, 0);
         }
         return spannableStringBuilder;
+    }
+
+    public static CharSequence replaceArrows(CharSequence text, boolean link) {
+        return replaceArrows(text, link, dp(8f / 3f), 0);
+    }
+
+    public static CharSequence replaceArrows(CharSequence text, boolean link, float translateX, float translateY) {
+        ColoredImageSpan span = new ColoredImageSpan(R.drawable.msg_mini_forumarrow, DynamicDrawableSpan.ALIGN_BOTTOM);
+        span.setScale(.88f, .88f);
+        span.translate(-translateX, translateY);
+        span.spaceScaleX = .8f;
+        if (link) {
+            span.useLinkPaintColor = link;
+        }
+
+        SpannableString rightArrow = new SpannableString(" >");
+        rightArrow.setSpan(span, rightArrow.length() - 1, rightArrow.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text = AndroidUtilities.replaceMultipleCharSequence(" >", text, rightArrow);
+
+        rightArrow = new SpannableString(">");
+        rightArrow.setSpan(span, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text = AndroidUtilities.replaceMultipleCharSequence(">", text, rightArrow);
+
+        span = new ColoredImageSpan(R.drawable.msg_mini_forumarrow, DynamicDrawableSpan.ALIGN_BOTTOM);
+        span.setScale(.88f, .88f);
+        span.translate(translateX, translateY);
+        span.rotate(180f);
+        span.spaceScaleX = .8f;
+        if (link) {
+            span.useLinkPaintColor = link;
+        }
+
+//        SpannableString leftArrow = new SpannableString("< ");
+//        leftArrow.setSpan(span, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+//        text = AndroidUtilities.replaceMultipleCharSequence("< ", text, leftArrow);
+
+        SpannableString leftArrow = new SpannableString("<");
+        leftArrow.setSpan(span, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text = AndroidUtilities.replaceMultipleCharSequence("<", text, leftArrow);
+
+        return text;
     }
 
     public static void recycleBitmaps(List<Bitmap> bitmapToRecycle) {
@@ -912,14 +997,66 @@ public class AndroidUtilities {
         return true;
     };
 
+    @Deprecated // use addLinksSafe
     public static boolean addLinks(Spannable text, int mask) {
         return addLinks(text, mask, false);
     }
 
+    @Deprecated // use addLinksSafe
     public static boolean addLinks(Spannable text, int mask, boolean internalOnly) {
         return addLinks(text, mask, internalOnly, true);
     }
 
+    public static boolean addLinksSafe(Spannable text, int mask, boolean internalOnly, boolean removeOldReplacements) {
+        if (text == null)
+            return false;
+        SpannableStringBuilder newText = new SpannableStringBuilder(text);
+        boolean success = doSafe(() -> addLinks(newText, mask, internalOnly, removeOldReplacements));
+        if (success) {
+            URLSpan[] oldSpans = text.getSpans(0, text.length(), URLSpan.class);
+            for (int i = 0; i < oldSpans.length; ++i) {
+                text.removeSpan(oldSpans[i]);
+            }
+            URLSpan[] newSpans = newText.getSpans(0, newText.length(), URLSpan.class);
+            for (int i = 0; i < newSpans.length; ++i) {
+                text.setSpan(newSpans[i], newText.getSpanStart(newSpans[i]), newText.getSpanEnd(newSpans[i]), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        return success;
+    }
+
+    public static boolean doSafe(Utilities.Callback0Return<Boolean> runnable) {
+        return doSafe(runnable, 200);
+    }
+
+    public static boolean doSafe(Utilities.Callback0Return<Boolean> runnable, int timeout) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Callable<Boolean> task = () -> {
+            try {
+                return runnable.run();
+            } catch (Exception e) {
+                FileLog.e(e);
+                return false;
+            }
+        };
+        boolean success = false;
+        Future<Boolean> future = null;
+        try {
+            future = executor.submit(task);
+            success = future.get(timeout, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException ex) {
+            if (future != null) {
+                future.cancel(true);
+            }
+        } catch (Exception ex) {
+            FileLog.e(ex);
+        } finally {
+            executor.shutdownNow();
+        }
+        return success;
+    }
+
+    @Deprecated // use addLinksSafe
     public static boolean addLinks(Spannable text, int mask, boolean internalOnly, boolean removeOldReplacements) {
         if (text == null || containsUnsupportedCharacters(text.toString()) || mask == 0) {
             return false;
@@ -2899,7 +3036,7 @@ public class AndroidUtilities {
             }
             SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder(stringBuilder);
             for (int a = 0; a < bolds.size() / 2; a++) {
-                spannableStringBuilder.setSpan(new TypefaceSpan(AndroidUtilities.getTypeface("fonts/rmedium.ttf")), bolds.get(a * 2), bolds.get(a * 2 + 1), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                spannableStringBuilder.setSpan(new TypefaceSpan(AndroidUtilities.bold()), bolds.get(a * 2), bolds.get(a * 2 + 1), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             return spannableStringBuilder;
         } catch (Exception e) {
@@ -3096,7 +3233,7 @@ public class AndroidUtilities {
     }
 
     public static boolean shouldShowClipboardToast() {
-        return (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !OneUIUtilities.hasBuiltInClipboardToasts()) && (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || XiaomiUtilities.isMIUI());
+        return (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !OneUIUtilities.hasBuiltInClipboardToasts()) && (Build.VERSION.SDK_INT < 32 || XiaomiUtilities.isMIUI());
     }
 
     public static boolean addToClipboard(CharSequence str) {
@@ -4570,8 +4707,18 @@ public class AndroidUtilities {
         }
     }
 
+    public static void lerp(int[] a, int[] b, float f, int[] to) {
+        if (to == null) return;
+        for (int i = 0; i < to.length; ++i) {
+            int av = a == null || i >= a.length ? 0 : a[i];
+            int bv = b == null || i >= b.length ? 0 : b[i];
+            to[i] = lerp(av, bv, f);
+        }
+    }
+
     public static float cascade(float fullAnimationT, float position, float count, float waveLength) {
-        final float waveDuration = 1f / count * waveLength;
+        if (count <= 0) return fullAnimationT;
+        final float waveDuration = 1f / count * Math.min(waveLength, count);
         final float waveOffset = position / count * (1f - waveDuration);
         return MathUtils.clamp((fullAnimationT - waveOffset) / waveDuration, 0, 1);
     }
@@ -5176,10 +5323,10 @@ public class AndroidUtilities {
         } else {
             spannableStringBuilder = new SpannableStringBuilder(from);
         }
-        int index = TextUtils.indexOf(from, what);
+        int index = TextUtils.indexOf(from, what, 0);
         while (index >= 0) {
             spannableStringBuilder.replace(index, index + what.length(), obj);
-            index = TextUtils.indexOf(spannableStringBuilder, what);
+            index = TextUtils.indexOf(spannableStringBuilder, what, index + 1);
         }
         return spannableStringBuilder;
     }
@@ -5240,7 +5387,30 @@ public class AndroidUtilities {
         return null;
     }
 
+    public static boolean hasDialogOnTop(BaseFragment fragment) {
+        if (fragment == null) return false;
+        if (fragment.visibleDialog != null) return true;
+        if (fragment.getParentLayout() == null) return false;
+        List<View> globalViews = allGlobalViews();
+        if (globalViews == null || globalViews.isEmpty()) return false;
+        View lastGlobalView = globalViews.get(globalViews.size() - 1);
+        return lastGlobalView != getRootView(fragment.getParentLayout().getView());
+    }
+
+    public static View getRootView(View v) {
+        View view = v;
+        while (view != null && view.getParent() instanceof View) {
+            view = ((View) view.getParent());
+        }
+        return view;
+    }
+
+    public static boolean makingGlobalBlurBitmap;
     public static void makeGlobalBlurBitmap(Utilities.Callback<Bitmap> onBitmapDone, float amount) {
+        makeGlobalBlurBitmap(onBitmapDone, amount, (int) amount, null, null);
+    }
+
+    public static void makeGlobalBlurBitmap(Utilities.Callback<Bitmap> onBitmapDone, float downscale, int amount, View forView, List<View> exclude) {
         if (onBitmapDone == null) {
             return;
         }
@@ -5251,20 +5421,32 @@ public class AndroidUtilities {
             onBitmapDone.run(null);
             return;
         }
+        makingGlobalBlurBitmap = true;
 
         final List<View> finalViews = views;
         //Utilities.themeQueue.postRunnable(() -> {
         try {
-            int w = (int) (AndroidUtilities.displaySize.x / amount);
-            int h = (int) ((AndroidUtilities.displaySize.y + AndroidUtilities.statusBarHeight) / amount);
+            int w;
+            int h;
+            if (forView == null) {
+                w = (int) (AndroidUtilities.displaySize.x / downscale);
+                h = (int) ((AndroidUtilities.displaySize.y + AndroidUtilities.statusBarHeight) / downscale);
+            } else {
+                w = (int) (forView.getWidth() / downscale);
+                h = (int) (forView.getHeight() / downscale);
+            }
+            int[] location = new int[2];
             Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
-            canvas.scale(1.0f / amount, 1.0f / amount);
+            if (forView != null) {
+                forView.getLocationOnScreen(location);
+                canvas.translate(-location[0] / downscale, -location[1] / downscale);
+            }
+            canvas.scale(1.0f / downscale, 1.0f / downscale);
             canvas.drawColor(Theme.getColor(Theme.key_windowBackgroundWhite));
-            int[] location = new int[2];
             for (int i = 0; i < finalViews.size(); ++i) {
                 View view = finalViews.get(i);
-                if (view instanceof PipRoundVideoView.PipFrameLayout || view instanceof PipRoundVideoView.PipFrameLayout) {
+                if (view instanceof PipRoundVideoView.PipFrameLayout || view instanceof PipRoundVideoView.PipFrameLayout || (exclude != null && exclude.contains(view))) {
                     continue;
                 }
 
@@ -5278,7 +5460,7 @@ public class AndroidUtilities {
 
                 canvas.save();
                 view.getLocationOnScreen(location);
-                canvas.translate(location[0] / amount, location[1] / amount);
+                canvas.translate(location[0] / downscale, location[1] / downscale);
                 try {
                     view.draw(canvas);
                 } catch (Exception e) {
@@ -5286,7 +5468,7 @@ public class AndroidUtilities {
                 }
                 canvas.restore();
             }
-            Utilities.stackBlurBitmap(bitmap, Math.max((int) amount, Math.max(w, h) / 180));
+            Utilities.stackBlurBitmap(bitmap, Math.max(amount, Math.max(w, h) / 180));
 //            AndroidUtilities.runOnUIThread(() -> {
                 onBitmapDone.run(bitmap);
 //            });
@@ -5295,6 +5477,8 @@ public class AndroidUtilities {
 //            AndroidUtilities.runOnUIThread(() -> {
                 onBitmapDone.run(null);
 //            });
+        } finally {
+            makingGlobalBlurBitmap = false;
         }
         //   });
     }
@@ -5437,6 +5621,12 @@ public class AndroidUtilities {
         } else {
             return !activity.isFinishing();
         }
+    }
+
+    public static boolean isSafeToShow(Context context) {
+        Activity activity = findActivity(context);
+        if (activity == null) return true;
+        return isActivityRunning(activity);
     }
 
     public static Pair<Integer, Integer> getImageOrientation(InputStream is) {
@@ -5618,4 +5808,69 @@ public class AndroidUtilities {
         }
         return isHonor;
     }
+
+    public static CharSequence withLearnMore(CharSequence text, Runnable onClick) {
+        SpannableString link = new SpannableString(LocaleController.getString(R.string.LearnMoreArrow));
+        link.setSpan(new ClickableSpan() {
+            @Override
+            public void onClick(@NonNull View widget) {
+                if (onClick != null) {
+                    onClick.run();
+                }
+            }
+
+            @Override
+            public void updateDrawState(@NonNull TextPaint ds) {
+                ds.setUnderlineText(false);
+                ds.setColor(ds.linkColor);
+            }
+        }, 0, link.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        SpannableStringBuilder result = new SpannableStringBuilder(text);
+        result.append(" ");
+        result.append(link);
+
+        return replaceArrows(result, true);
+    }
+
+    public static View findChildViewUnder(ViewGroup parent, float x, float y) {
+        if (parent == null) return null;
+        if (parent.getVisibility() != View.VISIBLE) return null;
+        for (int i = 0; i < parent.getChildCount(); ++i) {
+            View child = parent.getChildAt(i);
+            if (child == null) continue;
+            if (child.getVisibility() != View.VISIBLE) continue;
+            if (child instanceof ViewGroup) {
+                View foundChild = findChildViewUnder((ViewGroup) child, x - child.getLeft(), y - child.getTop());
+                if (foundChild != null) {
+                    return foundChild;
+                }
+            } else if (
+                x >= child.getX() && x <= child.getX() + child.getWidth() &&
+                y >= child.getY() && x <= child.getY() + child.getHeight()
+            ) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    public static void vibrateCursor(View view) {
+        try {
+            if (view == null || view.getContext() == null) return;
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+            if (!((Vibrator) view.getContext().getSystemService(Context.VIBRATOR_SERVICE)).hasAmplitudeControl()) return;
+            view.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+        } catch (Exception ignore) {}
+    }
+
+    public static void vibrate(View view) {
+        try {
+            if (view == null || view.getContext() == null) return;
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+            if (!((Vibrator) view.getContext().getSystemService(Context.VIBRATOR_SERVICE)).hasAmplitudeControl()) return;
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+        } catch (Exception ignore) {}
+    }
+
 }

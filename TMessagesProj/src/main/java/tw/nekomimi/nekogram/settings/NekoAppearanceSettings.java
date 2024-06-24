@@ -1,7 +1,6 @@
 package tw.nekomimi.nekogram.settings;
 
 import android.content.Context;
-import android.os.Build;
 import android.transition.TransitionManager;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,7 +12,6 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
-import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeDescription;
 import org.telegram.ui.Cells.DrawerProfileCell;
@@ -27,10 +25,10 @@ import org.telegram.ui.LaunchActivity;
 import java.util.ArrayList;
 
 import tw.nekomimi.nekogram.NekoConfig;
+import tw.nekomimi.nekogram.helpers.EmojiHelper;
 import tw.nekomimi.nekogram.helpers.PopupHelper;
-import tw.nekomimi.nekogram.helpers.remote.EmojiHelper;
 
-public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate, EmojiHelper.EmojiPacksLoadedListener {
+public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements NotificationCenter.NotificationCenterDelegate {
 
     private DrawerProfilePreviewCell profilePreviewCell;
 
@@ -58,7 +56,6 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
 
     @Override
     public boolean onFragmentCreate() {
-        EmojiHelper.getInstance().loadEmojisInfo(this);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
         return super.onFragmentCreate();
     }
@@ -233,13 +230,6 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
     }
 
     @Override
-    public void emojiPacksLoaded(String error) {
-        if (listAdapter != null) {
-            listAdapter.notifyItemChanged(emojiSetsRow, PARTIAL);
-        }
-    }
-
-    @Override
     public void didReceivedNotification(int id, int account, Object... args) {
         if (id == NotificationCenter.emojiLoaded && listAdapter != null) {
             listAdapter.notifyItemChanged(emojiSetsRow, PARTIAL);
@@ -253,7 +243,7 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
         }
 
         @Override
-        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position, boolean partial) {
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position, boolean partial, boolean divider) {
             switch (holder.getItemViewType()) {
                 case TYPE_SETTINGS: {
                     TextSettingsCell textCell = (TextSettingsCell) holder.itemView;
@@ -264,7 +254,7 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
                             case 3 -> LocaleController.getString(R.string.Halloween);
                             default -> LocaleController.getString(R.string.DependsOnDate);
                         };
-                        textCell.setTextAndValue(LocaleController.getString(R.string.EventType), value, partial, true);
+                        textCell.setTextAndValue(LocaleController.getString(R.string.EventType), value, partial, divider);
                     } else if (position == tabsTitleTypeRow) {
                         String value = switch (NekoConfig.tabsTitleType) {
                             case NekoConfig.TITLE_TYPE_TEXT ->
@@ -273,7 +263,7 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
                                     LocaleController.getString(R.string.TabTitleTypeIcon);
                             default -> LocaleController.getString(R.string.TabTitleTypeMix);
                         };
-                        textCell.setTextAndValue(LocaleController.getString(R.string.TabTitleType), value, partial, false);
+                        textCell.setTextAndValue(LocaleController.getString(R.string.TabTitleType), value, partial, divider);
                     } else if (position == tabletModeRow) {
                         String value = switch (NekoConfig.tabletMode) {
                             case NekoConfig.TABLET_AUTO ->
@@ -282,7 +272,7 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
                                     LocaleController.getString(R.string.Enable);
                             default -> LocaleController.getString(R.string.Disable);
                         };
-                        textCell.setTextAndValue(LocaleController.getString(R.string.TabletMode), value, partial, false);
+                        textCell.setTextAndValue(LocaleController.getString(R.string.TabletMode), value, partial, divider);
                     }
                     break;
                 }
@@ -290,23 +280,23 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
                     TextCheckCell textCell = (TextCheckCell) holder.itemView;
                     textCell.setEnabled(true, null);
                     if (position == hidePhoneRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.HidePhone), NekoConfig.hidePhone, false);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.HidePhone), NekoConfig.hidePhone, divider);
                     } else if (position == avatarAsDrawerBackgroundRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.AvatarAsBackground), NekoConfig.avatarAsDrawerBackground, true);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.AvatarAsBackground), NekoConfig.avatarAsDrawerBackground, divider);
                     } else if (position == disableNumberRoundingRow) {
-                        textCell.setTextAndValueAndCheck(LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777", NekoConfig.disableNumberRounding, true, true);
+                        textCell.setTextAndValueAndCheck(LocaleController.getString(R.string.DisableNumberRounding), "4.8K -> 4777", NekoConfig.disableNumberRounding, divider, divider);
                     } else if (position == appBarShadowRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.DisableAppBarShadow), NekoConfig.disableAppBarShadow, true);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.DisableAppBarShadow), NekoConfig.disableAppBarShadow, divider);
                     } else if (position == mediaPreviewRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.MediaPreview), NekoConfig.mediaPreview, true);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.MediaPreview), NekoConfig.mediaPreview, divider);
                     } else if (position == formatTimeWithSecondsRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.FormatWithSeconds), NekoConfig.formatTimeWithSeconds, true);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.FormatWithSeconds), NekoConfig.formatTimeWithSeconds, divider);
                     } else if (position == avatarBackgroundBlurRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.BlurAvatarBackground), NekoConfig.avatarBackgroundBlur, true);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.BlurAvatarBackground), NekoConfig.avatarBackgroundBlur, divider);
                     } else if (position == avatarBackgroundDarkenRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.DarkenAvatarBackground), NekoConfig.avatarBackgroundDarken, true);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.DarkenAvatarBackground), NekoConfig.avatarBackgroundDarken, divider);
                     } else if (position == hideAllTabRow) {
-                        textCell.setTextAndCheck(LocaleController.getString(R.string.HideAllTab), NekoConfig.hideAllTab, true);
+                        textCell.setTextAndCheck(LocaleController.getString(R.string.HideAllTab), NekoConfig.hideAllTab, divider);
                     }
                     break;
                 }
@@ -329,7 +319,7 @@ public class NekoAppearanceSettings extends BaseNekoSettingsActivity implements 
                 case TYPE_EMOJI: {
                     EmojiSetCell emojiPackSetCell = (EmojiSetCell) holder.itemView;
                     if (position == emojiSetsRow) {
-                        emojiPackSetCell.setData(EmojiHelper.getInstance().getCurrentEmojiPackInfo(), partial, true);
+                        emojiPackSetCell.setData(EmojiHelper.getInstance().getCurrentEmojiPackInfo(), partial, divider);
                     }
                     break;
                 }

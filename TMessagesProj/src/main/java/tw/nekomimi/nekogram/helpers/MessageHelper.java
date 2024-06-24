@@ -15,7 +15,6 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.util.Base64;
-import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -72,25 +71,58 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.HashMap;
+import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import tw.nekomimi.nekogram.helpers.remote.BaseRemoteHelper;
-import tw.nekomimi.nekogram.helpers.remote.UpdateHelper;
 
 public class MessageHelper extends BaseController {
 
     private static final MessageHelper[] Instance = new MessageHelper[UserConfig.MAX_ACCOUNT_COUNT];
     private static final CharsetDecoder utf8Decoder = StandardCharsets.UTF_8.newDecoder();
-    private static final SpannableStringBuilder[] spannedStrings = new SpannableStringBuilder[3];
+    private static final SpannableStringBuilder[] spannedStrings = new SpannableStringBuilder[5];
 
     public MessageHelper(int num) {
         super(num);
+    }
+
+    private static String formatTime(int timestamp) {
+        return LocaleController.formatString(R.string.formatDateAtTime, LocaleController.getInstance().formatterYear.format(new Date(timestamp * 1000L)), LocaleController.getInstance().formatterDayWithSeconds.format(new Date(timestamp * 1000L)));
+    }
+
+    public static CharSequence getTimeHintText(MessageObject messageObject) {
+        var text = new SpannableStringBuilder();
+        if (spannedStrings[3] == null) {
+            spannedStrings[3] = new SpannableStringBuilder("\u200B");
+            spannedStrings[3].setSpan(new ColoredImageSpan(Theme.chat_timeHintSentDrawable), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        text.append(spannedStrings[3]);
+        text.append(' ');
+        text.append(formatTime(messageObject.messageOwner.date));
+        if (messageObject.messageOwner.edit_date != 0) {
+            text.append("\n");
+            if (spannedStrings[1] == null) {
+                spannedStrings[1] = new SpannableStringBuilder("\u200B");
+                spannedStrings[1].setSpan(new ColoredImageSpan(Theme.chat_editDrawable), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            text.append(spannedStrings[1]);
+            text.append(' ');
+            text.append(formatTime(messageObject.messageOwner.edit_date));
+        }
+        if (messageObject.messageOwner.fwd_from != null && messageObject.messageOwner.fwd_from.date != 0) {
+            text.append("\n");
+            if (spannedStrings[4] == null) {
+                spannedStrings[4] = new SpannableStringBuilder("\u200B");
+                var span = new ColoredImageSpan(Theme.chat_timeHintForwardDrawable);
+                span.setSize(AndroidUtilities.dp(12));
+                spannedStrings[4].setSpan(span, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            text.append(spannedStrings[4]);
+            text.append(' ');
+            text.append(formatTime(messageObject.messageOwner.fwd_from.date));
+        }
+        return text;
     }
 
     public static CharSequence createBlockedString(MessageObject messageObject) {
@@ -188,51 +220,6 @@ public class MessageHelper extends BaseController {
         }
     }
 
-    public void generateUpdateInfo(BaseFragment fragment, SparseArray<MessageObject>[] selectedMessagesIds, Runnable callback) {
-        fragment.showDialog(new AlertDialog.Builder(fragment.getParentActivity())
-                .setItems(new CharSequence[]{"direct", "play"}, (dialog, which) -> {
-                    var tag = which == 0 ? "updatev4" : "updateplayv4";
-                    ArrayList<MessageObject> messageObjects = new ArrayList<>();
-                    for (int a = 1; a >= 0; a--) {
-                        for (int b = 0; b < selectedMessagesIds[a].size(); b++) {
-                            messageObjects.add(selectedMessagesIds[a].valueAt(b));
-                        }
-                    }
-                    var update = new UpdateHelper.Update();
-                    update.canNotSkip = false;
-                    Pattern regex = Pattern.compile("Nekogram-(.*)-(\\d+)-(.*)\\.apk");
-                    for (MessageObject messageObject : messageObjects) {
-                        if (messageObject.isAnyKindOfSticker()) {
-                            update.sticker = messageObject.getId();
-                        } else if (messageObject.getDocument() != null) {
-                            Matcher m = regex.matcher(messageObject.getDocumentName());
-                            if (m.find()) {
-                                if (update.version == null) {
-                                    update.version = m.group(1);
-                                    //noinspection ConstantConditions
-                                    update.versionCode = Integer.valueOf(m.group(2));
-                                }
-                                if (which == 0) {
-                                    String abi = m.group(3);
-                                    if (abi != null) {
-                                        if (update.files == null) {
-                                            update.files = new HashMap<>();
-                                        }
-                                        update.files.put(abi, messageObject.getId());
-                                    }
-                                } else if (update.url == null) {
-                                    update.url = "https://play.google.com/store/apps/details?id=tw.nekomimi.nekogram";
-                                }
-                            }
-                        } else {
-                            update.message = messageObject.getId();
-                        }
-                    }
-                    AndroidUtilities.addToClipboard("#" + tag + BaseRemoteHelper.GSON.toJson(update));
-                    callback.run();
-                }).create());
-    }
-
     private MessageObject getTargetMessageObjectFromGroup(MessageObject.GroupedMessages selectedObjectGroup) {
         MessageObject messageObject = null;
         for (MessageObject object : selectedObjectGroup.messages) {
@@ -252,10 +239,10 @@ public class MessageHelper extends BaseController {
         String message;
         if (messageObject.isPoll()) {
             TLRPC.Poll poll = ((TLRPC.TL_messageMediaPoll) messageObject.messageOwner.media).poll;
-            StringBuilder pollText = new StringBuilder(poll.question).append("\n");
-            for (TLRPC.TL_pollAnswer answer : poll.answers) {
+            StringBuilder pollText = new StringBuilder(poll.question.text).append("\n");
+            for (TLRPC.PollAnswer answer : poll.answers) {
                 pollText.append("\n\uD83D\uDD18 ");
-                pollText.append(answer.text);
+                pollText.append(answer.text.text);
             }
             message = pollText.toString();
         } else if (messageObject.isVoiceTranscriptionOpen()) {

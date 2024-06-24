@@ -4,7 +4,7 @@ import org.telegram.messenger.DialogObject;
 import org.telegram.tgnet.AbstractSerializedData;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
-import org.telegram.tgnet.TLRPC.TL_statsPercentValue;
+import org.telegram.tgnet.tl.TL_stats.TL_statsPercentValue;
 import org.telegram.ui.Stories.recorder.StoryPrivacyBottomSheet;
 
 import java.util.ArrayList;
@@ -187,6 +187,7 @@ public class TL_stories {
         public TLRPC.Peer peer;
         public int max_read_id;
         public ArrayList<StoryItem> stories = new ArrayList<>();
+        public boolean checkedExpired; //custom
 
         public static PeerStories TLdeserialize(AbstractSerializedData stream, int constructor, boolean exception) {
             PeerStories result = null;
@@ -736,10 +737,12 @@ public class TL_stories {
     }
 
     public static class TL_stories_stories extends TLObject {
-        public static final int constructor = 0x5dd8c3c8;
+        public static final int constructor = 0x63c3dd0a;
 
+        public int flags;
         public int count;
         public ArrayList<StoryItem> stories = new ArrayList<>();
+        public ArrayList<Integer> pinned_to_top = new ArrayList<>();
         public ArrayList<TLRPC.Chat> chats = new ArrayList<>();
         public ArrayList<TLRPC.User> users = new ArrayList<>();
 
@@ -757,6 +760,7 @@ public class TL_stories {
         }
 
         public void readParams(AbstractSerializedData stream, boolean exception) {
+            flags = stream.readInt32(exception);
             count = stream.readInt32(exception);
             int magic = stream.readInt32(exception);
             if (magic != 0x1cb5c415) {
@@ -772,6 +776,19 @@ public class TL_stories {
                     return;
                 }
                 stories.add(object);
+            }
+            if ((flags & 1) != 0) {
+                magic = stream.readInt32(exception);
+                if (magic != 0x1cb5c415) {
+                    if (exception) {
+                        throw new RuntimeException(String.format("wrong Vector magic, got %x", magic));
+                    }
+                    return;
+                }
+                count = stream.readInt32(exception);
+                for (int a = 0; a < count; a++) {
+                    pinned_to_top.add(stream.readInt32(exception));
+                }
             }
             magic = stream.readInt32(exception);
             if (magic != 0x1cb5c415) {
@@ -807,12 +824,21 @@ public class TL_stories {
 
         public void serializeToStream(AbstractSerializedData stream) {
             stream.writeInt32(constructor);
+            stream.writeInt32(flags);
             stream.writeInt32(count);
             stream.writeInt32(0x1cb5c415);
             int count = stories.size();
             stream.writeInt32(count);
             for (int a = 0; a < count; a++) {
                 stories.get(a).serializeToStream(stream);
+            }
+            if ((flags & 1) != 0) {
+                stream.writeInt32(0x1cb5c415);
+                count = pinned_to_top.size();
+                stream.writeInt32(count);
+                for (int a = 0; a < count; a++) {
+                    stream.writeInt32(pinned_to_top.get(a));
+                }
             }
             stream.writeInt32(0x1cb5c415);
             count = chats.size();
@@ -1125,6 +1151,28 @@ public class TL_stories {
             stream.writeInt32(constructor);
             peer.serializeToStream(stream);
             stream.writeInt32(max_id);
+        }
+    }
+
+    public static class TL_stories_incrementStoryViews extends TLObject {
+        public static final int constructor = 0xb2028afb;
+
+        public TLRPC.InputPeer peer;
+        public ArrayList<Integer> id = new ArrayList<>();
+
+        public TLObject deserializeResponse(AbstractSerializedData stream, int constructor, boolean exception) {
+            return TLRPC.Bool.TLdeserialize(stream, constructor, exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            peer.serializeToStream(stream);
+            stream.writeInt32(0x1cb5c415);
+            int count = id.size();
+            stream.writeInt32(count);
+            for (int a = 0; a < count; a++) {
+                stream.writeInt32(id.get(a));
+            }
         }
     }
 
@@ -1621,7 +1669,7 @@ public class TL_stories {
                 next_level_boosts = stream.readInt32(exception);
             }
             if ((flags & 2) != 0) {
-                premium_audience = TL_statsPercentValue.TLdeserialize(stream, stream.readInt32(exception), exception);
+                premium_audience = TL_stats.TL_statsPercentValue.TLdeserialize(stream, stream.readInt32(exception), exception);
             }
             boost_url = stream.readString(exception);
             if ((flags & 8) != 0) {
@@ -2166,7 +2214,7 @@ public class TL_stories {
         }
     }
 
-    public static class TL_publicForwardStory extends TLRPC.PublicForward {
+    public static class TL_publicForwardStory extends TL_stats.PublicForward {
         public static final int constructor = 0xedf3add0;
 
         public TLRPC.Peer peer;
@@ -3050,8 +3098,8 @@ public class TL_stories {
     public static class TL_stats_storyStats extends TLObject {
         public final static int constructor = 0x50cd067c;
 
-        public TLRPC.StatsGraph views_graph;
-        public TLRPC.StatsGraph reactions_by_emotion_graph;
+        public TL_stats.StatsGraph views_graph;
+        public TL_stats.StatsGraph reactions_by_emotion_graph;
 
         public static TL_stats_storyStats TLdeserialize(AbstractSerializedData stream, int constructor, boolean exception) {
             if (TL_stats_storyStats.constructor != constructor) {
@@ -3067,8 +3115,8 @@ public class TL_stories {
         }
 
         public void readParams(AbstractSerializedData stream, boolean exception) {
-            views_graph = TLRPC.StatsGraph.TLdeserialize(stream, stream.readInt32(exception), exception);
-            reactions_by_emotion_graph = TLRPC.StatsGraph.TLdeserialize(stream, stream.readInt32(exception), exception);
+            views_graph = TL_stats.StatsGraph.TLdeserialize(stream, stream.readInt32(exception), exception);
+            reactions_by_emotion_graph = TL_stats.StatsGraph.TLdeserialize(stream, stream.readInt32(exception), exception);
         }
 
         public void serializeToStream(AbstractSerializedData stream) {
@@ -3321,6 +3369,28 @@ public class TL_stories {
                 stream.writeString(offset);
             }
             stream.writeInt32(limit);
+        }
+    }
+
+    public static class TL_togglePinnedToTop extends TLObject {
+        public static final int constructor = 0xb297e9b;
+
+        public TLRPC.InputPeer peer;
+        public ArrayList<Integer> id = new ArrayList<>();
+
+        public TLObject deserializeResponse(AbstractSerializedData stream, int constructor, boolean exception) {
+            return TLRPC.Bool.TLdeserialize(stream, constructor, exception);
+        }
+
+        public void serializeToStream(AbstractSerializedData stream) {
+            stream.writeInt32(constructor);
+            peer.serializeToStream(stream);
+            stream.writeInt32(0x1cb5c415);
+            int count = id.size();
+            stream.writeInt32(count);
+            for (int a = 0; a < count; a++) {
+                stream.writeInt32(id.get(a));
+            }
         }
     }
 }

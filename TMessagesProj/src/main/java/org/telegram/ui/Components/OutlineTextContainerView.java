@@ -26,7 +26,7 @@ public class OutlineTextContainerView extends FrameLayout {
             new SimpleFloatPropertyCompat<OutlineTextContainerView>("selectionProgress", obj -> obj.selectionProgress, (obj, value) -> {
                 obj.selectionProgress = value;
                 if (!obj.forceUseCenter) {
-                    obj.outlinePaint.setStrokeWidth(obj.strokeWidthRegular + (obj.strokeWidthSelected - obj.strokeWidthRegular) * obj.selectionProgress);
+                    obj.outlinePaint.setStrokeWidth(AndroidUtilities.lerp(obj.strokeWidthRegular, obj.strokeWidthSelected, obj.selectionProgress));
                     obj.updateColor();
                 }
                 obj.invalidate();
@@ -50,13 +50,21 @@ public class OutlineTextContainerView extends FrameLayout {
     private float errorProgress;
 
     private float strokeWidthRegular = Math.max(2, AndroidUtilities.dp(0.5f));
-    private float strokeWidthSelected = AndroidUtilities.dp(1.5f);
+    private float strokeWidthSelected = AndroidUtilities.dp(1.6667f);
 
     private EditText attachedEditText;
     private boolean forceUseCenter;
 
+    private final Theme.ResourcesProvider resourcesProvider;
+
     public OutlineTextContainerView(Context context) {
+        this(context, null);
+    }
+
+    public OutlineTextContainerView(Context context, Theme.ResourcesProvider resourcesProvider) {
         super(context);
+        this.resourcesProvider = resourcesProvider;
+
         setWillNotDraw(false);
         textPaint.setTextSize(AndroidUtilities.dp(16));
         outlinePaint.setStyle(Paint.Style.STROKE);
@@ -92,10 +100,10 @@ public class OutlineTextContainerView extends FrameLayout {
     }
 
     public void updateColor() {
-        int textSelectionColor = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundWhiteHintText), Theme.getColor(Theme.key_windowBackgroundWhiteValueText), forceUseCenter ? 0f : selectionProgress);
-        textPaint.setColor(ColorUtils.blendARGB(textSelectionColor, Theme.getColor(Theme.key_text_RedBold), errorProgress));
-        int selectionColor = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundWhiteInputField), Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated), forceUseCenter ? 0f : selectionProgress);
-        setColor(ColorUtils.blendARGB(selectionColor, Theme.getColor(Theme.key_text_RedBold), errorProgress));
+        int textSelectionColor = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundWhiteHintText, resourcesProvider), Theme.getColor(Theme.key_windowBackgroundWhiteValueText, resourcesProvider), forceUseCenter ? 0f : selectionProgress);
+        textPaint.setColor(ColorUtils.blendARGB(textSelectionColor, Theme.getColor(Theme.key_text_RedBold, resourcesProvider), errorProgress));
+        int selectionColor = ColorUtils.blendARGB(Theme.getColor(Theme.key_windowBackgroundWhiteInputField, resourcesProvider), Theme.getColor(Theme.key_windowBackgroundWhiteInputFieldActivated, resourcesProvider), forceUseCenter ? 0f : selectionProgress);
+        setColor(ColorUtils.blendARGB(selectionColor, Theme.getColor(Theme.key_text_RedBold, resourcesProvider), errorProgress));
     }
 
     public void animateSelection(float newValue) {
@@ -149,7 +157,7 @@ public class OutlineTextContainerView extends FrameLayout {
         rect.set(getPaddingLeft() + AndroidUtilities.dp(PADDING_LEFT - PADDING_TEXT), getPaddingTop(), getWidth() - AndroidUtilities.dp(PADDING_LEFT + PADDING_TEXT) - getPaddingRight(), getPaddingTop() + stroke * 2);
         canvas.clipRect(rect, Region.Op.DIFFERENCE);
         rect.set(getPaddingLeft() + stroke, getPaddingTop() + stroke, getWidth() - stroke - getPaddingRight(), getHeight() - stroke - getPaddingBottom());
-        canvas.drawRoundRect(rect, AndroidUtilities.dp(6), AndroidUtilities.dp(6), outlinePaint);
+        canvas.drawRoundRect(rect, AndroidUtilities.dp(8), AndroidUtilities.dp(8), outlinePaint);
         canvas.restore();
 
         float left = getPaddingLeft() + AndroidUtilities.dp(PADDING_LEFT - PADDING_TEXT), lineY = getPaddingTop() + stroke,

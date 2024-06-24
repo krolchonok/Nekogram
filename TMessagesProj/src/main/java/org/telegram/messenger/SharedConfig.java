@@ -235,7 +235,8 @@ public class SharedConfig {
     public static boolean allowScreenCapture;
     public static int lastPauseTime;
     public static boolean isWaitingForPasscodeEnter;
-    public static boolean useFingerprint = true;
+    public static boolean useFingerprintLock = true;
+    public static boolean useFaceLock = true;
     public static int suggestStickers;
     public static boolean suggestAnimatedEmoji;
     public static int keepMedia = CacheByChatsController.KEEP_MEDIA_ONE_MONTH; //deprecated
@@ -257,7 +258,8 @@ public class SharedConfig {
     public static boolean forceDisableTabletMode;
     public static boolean updateStickersOrderOnSend = true;
     public static boolean bigCameraForRound;
-    public static boolean useCamera2;
+    public static Boolean useCamera2Force;
+    public static boolean useNewBlur;
     public static boolean useSurfaceInStories;
     public static boolean photoViewerBlur = true;
     public static boolean payByInvoice;
@@ -433,7 +435,7 @@ public class SharedConfig {
                 editor.putInt("badPasscodeTries", badPasscodeTries);
                 editor.putInt("autoLockIn", autoLockIn);
                 editor.putInt("lastPauseTime", lastPauseTime);
-                editor.putBoolean("useFingerprint", useFingerprint);
+                editor.putBoolean("useFingerprint", useFingerprintLock);
                 editor.putBoolean("allowScreenCapture", allowScreenCapture);
                 editor.putString("pushString2", pushString);
                 editor.putInt("pushType", pushType);
@@ -511,7 +513,7 @@ public class SharedConfig {
             badPasscodeTries = preferences.getInt("badPasscodeTries", 0);
             autoLockIn = preferences.getInt("autoLockIn", 60 * 60);
             lastPauseTime = preferences.getInt("lastPauseTime", 0);
-            useFingerprint = preferences.getBoolean("useFingerprint", true);
+            useFingerprintLock = preferences.getBoolean("useFingerprint", true);
             allowScreenCapture = preferences.getBoolean("allowScreenCapture", false);
             lastLocalId = preferences.getInt("lastLocalId", -210000);
             pushString = preferences.getString("pushString2", "");
@@ -646,7 +648,8 @@ public class SharedConfig {
             updateStickersOrderOnSend = preferences.getBoolean("updateStickersOrderOnSend", true);
             dayNightWallpaperSwitchHint = preferences.getInt("dayNightWallpaperSwitchHint", 0);
             bigCameraForRound = preferences.getBoolean("bigCameraForRound", false);
-            useCamera2 = preferences.getBoolean("useCamera2", BuildVars.DEBUG_VERSION);
+            useNewBlur = preferences.getBoolean("useNewBlur", true);
+            useCamera2Force = !preferences.contains("useCamera2Force") ? null : preferences.getBoolean("useCamera2Force", false);
             useSurfaceInStories = preferences.getBoolean("useSurfaceInStories", Build.VERSION.SDK_INT >= 30);
             payByInvoice = preferences.getBoolean("payByInvoice", false);
             photoViewerBlur = preferences.getBoolean("photoViewerBlur", true);
@@ -854,7 +857,7 @@ public class SharedConfig {
         passcodeSalt = new byte[0];
         autoLockIn = 60 * 60;
         lastPauseTime = 0;
-        useFingerprint = true;
+        useFingerprintLock = true;
         isWaitingForPasscodeEnter = false;
         allowScreenCapture = false;
         textSelectionHintShows = 0;
@@ -1334,6 +1337,8 @@ public class SharedConfig {
         LocaleController.resetImperialSystemType();
     }
 
+    private static boolean hasWsNeko = !NekoConfig.isChineseUser || !TextUtils.isEmpty(NekoConfig.wsDomain);
+
     public static void loadProxyList() {
         if (proxyListLoaded) {
             return;
@@ -1402,7 +1407,7 @@ public class SharedConfig {
             ProxyInfo info = currentProxy = new ProxyInfo(proxyAddress, proxyPort, proxyUsername, proxyPassword, proxySecret);
             proxyList.add(0, info);
         }
-        if (!NekoConfig.isChineseUser || !TextUtils.isEmpty(NekoConfig.wsDomain)) {
+        if (hasWsNeko) {
             ProxyInfo info = new ProxyInfo(WsHelper.WS_ADDRESS, 6356, "", "", "");
             proxyList.add(0, info);
         }
@@ -1425,7 +1430,7 @@ public class SharedConfig {
         serializedData.writeInt32(-1);
         serializedData.writeByte(PROXY_CURRENT_SCHEMA_VERSION);
         int count = infoToSerialize.size();
-        serializedData.writeInt32(count - 1);
+        serializedData.writeInt32(hasWsNeko ? count - 1 : count);
         for (int a = count - 1; a >= 0; a--) {
             ProxyInfo info = infoToSerialize.get(a);
             if (WsHelper.WS_ADDRESS.equals(info.address)) {
@@ -1703,7 +1708,7 @@ public class SharedConfig {
     }
 
     public static boolean canBlurChat() {
-        return true/*getDevicePerformanceClass() == PERFORMANCE_CLASS_HIGH*/;
+        return true || getDevicePerformanceClass() >= (Build.VERSION.SDK_INT >= 31 ? PERFORMANCE_CLASS_AVERAGE : PERFORMANCE_CLASS_HIGH) || BuildVars.DEBUG_PRIVATE_VERSION;
     }
 
     public static boolean chatBlurEnabled() {
@@ -1771,10 +1776,22 @@ public class SharedConfig {
                 .apply();
     }
 
-    public static void toggleUseCamera2() {
+    public static void toggleUseNewBlur() {
+        useNewBlur = !useNewBlur;
         ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Activity.MODE_PRIVATE)
                 .edit()
-                .putBoolean("useCamera2", useCamera2 = !useCamera2)
+                .putBoolean("useNewBlur", useNewBlur)
+                .apply();
+    }
+
+    public static boolean isUsingCamera2(int currentAccount) {
+        return useCamera2Force == null ? !MessagesController.getInstance(currentAccount).androidDisableRoundCamera2 : useCamera2Force;
+    }
+
+    public static void toggleUseCamera2(int currentAccount) {
+        ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Activity.MODE_PRIVATE)
+                .edit()
+                .putBoolean("useCamera2Force", useCamera2Force = !isUsingCamera2(currentAccount))
                 .apply();
     }
 

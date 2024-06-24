@@ -57,8 +57,9 @@ import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.Utilities;
 import org.telegram.ui.Components.BackButtonMenu;
-import org.telegram.ui.Components.BotWebViewSheet;
+import org.telegram.ui.bots.BotWebViewSheet;
 import org.telegram.ui.Components.Bulletin;
 import org.telegram.ui.Components.ChatAttachAlert;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -67,7 +68,6 @@ import org.telegram.ui.Components.FloatingDebug.FloatingDebugProvider;
 import org.telegram.ui.Components.GroupCallPip;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.LaunchActivity;
-import org.telegram.ui.LogoutActivity;
 import org.telegram.ui.Stories.StoryViewer;
 
 import java.util.ArrayList;
@@ -94,7 +94,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
         if (!fragmentsStack.isEmpty()) {
             lastFragment = fragmentsStack.get(fragmentsStack.size() - 1);
         }
-        return lastFragment != null && lastFragment.storyViewer != null && lastFragment.storyViewer.attachedToParent();
+        return lastFragment != null && lastFragment.getLastStoryViewer() != null && lastFragment.getLastStoryViewer().attachedToParent();
     }
 
     public class LayoutContainer extends FrameLayout {
@@ -119,7 +119,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
             if (!fragmentsStack.isEmpty()) {
                 lastFragment = fragmentsStack.get(fragmentsStack.size() - 1);
             }
-            if (storyViewerAttached() && lastFragment.storyViewer.isFullyVisible() && !lastFragment.isStoryViewer(child)) {
+            if (storyViewerAttached() && lastFragment != null && lastFragment.getLastStoryViewer() != null && lastFragment.getLastStoryViewer().isFullyVisible() && lastFragment.getLastStoryViewer().windowView != child) {
                 return true;
             }
             if (child instanceof ActionBar) {
@@ -301,9 +301,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                                     if (shouldBeEnabled != enabled) {
                                         ripple.setState(shouldBeEnabled ? new int[]{android.R.attr.state_pressed, android.R.attr.state_enabled} : new int[]{});
                                         if (shouldBeEnabled) {
-                                            try {
-                                                button.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
-                                            } catch (Exception ignore) {}
+                                            AndroidUtilities.vibrateCursor(button);
                                         }
                                     }
                                 } else if (event.getAction() == MotionEvent.ACTION_UP) {
@@ -1716,7 +1714,7 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
             fragment.onTransitionAnimationEnd(true, false);
             fragment.onBecomeFullyVisible();
         }
-        AnalyticsHelper.trackEvent("present_fragment");
+        AnalyticsHelper.trackScreenView();
         return true;
     }
 
@@ -1780,6 +1778,10 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
             }
             onFragmentStackChanged("addFragmentToStack " + position);
         } else {
+            if (position == INavigationLayout.FORCE_ATTACH_VIEW_AS_FIRST) {
+                position = 0;
+                attachViewTo(fragment, position);
+            }
             fragmentsStack.add(position, fragment);
             onFragmentStackChanged("addFragmentToStack");
         }
@@ -1807,6 +1809,35 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
             fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
         }
         containerView.addView(fragmentView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        if (fragment.actionBar != null && fragment.actionBar.shouldAddToContainer()) {
+            if (removeActionBarExtraHeight) {
+                fragment.actionBar.setOccupyStatusBar(false);
+            }
+            ViewGroup parent = (ViewGroup) fragment.actionBar.getParent();
+            if (parent != null) {
+                parent.removeView(fragment.actionBar);
+            }
+            containerView.addView(fragment.actionBar);
+            fragment.actionBar.setTitleOverlayText(titleOverlayText, titleOverlayTextId, overlayAction);
+        }
+        fragment.attachStoryViewer(containerView);
+    }
+
+    private void attachViewTo(BaseFragment fragment, int position) {
+        View fragmentView = fragment.fragmentView;
+        if (fragmentView == null) {
+            fragmentView = fragment.createView(parentActivity);
+        } else {
+            ViewGroup parent = (ViewGroup) fragmentView.getParent();
+            if (parent != null) {
+                fragment.onRemoveFromParent();
+                parent.removeView(fragmentView);
+            }
+        }
+        if (!fragment.hasOwnBackground && fragmentView.getBackground() == null) {
+            fragmentView.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+        }
+        containerView.addView(fragmentView, Utilities.clamp(position, containerView.getChildCount(), 0), LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         if (fragment.actionBar != null && fragment.actionBar.shouldAddToContainer()) {
             if (removeActionBarExtraHeight) {
                 fragment.actionBar.setOccupyStatusBar(false);
@@ -2816,11 +2847,8 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (getLastFragment() != null && getLastFragment().overlayStoryViewer != null && getLastFragment().overlayStoryViewer.attachedToParent()) {
-            return getLastFragment().overlayStoryViewer.windowView.dispatchTouchEvent(ev);
-        }
-        if (getLastFragment() != null && getLastFragment().storyViewer != null && getLastFragment().storyViewer.attachedToParent()) {
-            return getLastFragment().storyViewer.windowView.dispatchTouchEvent(ev);
+        if (getLastFragment() != null && getLastFragment().getLastStoryViewer() != null && getLastFragment().getLastStoryViewer().attachedToParent()) {
+            return getLastFragment().getLastStoryViewer().windowView.dispatchTouchEvent(ev);
         }
         return super.dispatchTouchEvent(ev);
     }

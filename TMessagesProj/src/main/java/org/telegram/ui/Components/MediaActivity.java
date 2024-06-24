@@ -16,7 +16,6 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -25,11 +24,8 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 
-import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -62,8 +58,6 @@ import org.telegram.ui.Components.FloatingDebug.FloatingDebugProvider;
 import org.telegram.ui.Components.Paint.ShapeDetector;
 import org.telegram.ui.ProfileActivity;
 import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
-import org.telegram.ui.Stories.recorder.KeyboardNotifier;
-import org.telegram.ui.Stories.recorder.StoryRecorder;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -146,6 +140,11 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
         getNotificationCenter().removeObserver(this, NotificationCenter.userInfoDidLoad);
         getNotificationCenter().removeObserver(this, NotificationCenter.currentUserPremiumStatusChanged);
         getNotificationCenter().removeObserver(this, NotificationCenter.storiesEnabledUpdate);
+        if (applyBulletin != null) {
+            Runnable runnable = applyBulletin;
+            applyBulletin = null;
+            AndroidUtilities.runOnUIThread(runnable);
+        }
     }
 
     @Override
@@ -259,8 +258,8 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
             }
 
             @Override
-            protected void drawList(Canvas blurCanvas, boolean top) {
-                sharedMediaLayout.drawListForBlur(blurCanvas);
+            protected void drawList(Canvas blurCanvas, boolean top, ArrayList<IViewWithInvalidateCallback> views) {
+                sharedMediaLayout.drawListForBlur(blurCanvas, views);
             }
         };
         fragmentView.needBlur = true;
@@ -354,7 +353,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
 
             nameTextView[i].setTextSize(18);
             nameTextView[i].setGravity(Gravity.LEFT);
-            nameTextView[i].setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+            nameTextView[i].setTypeface(AndroidUtilities.bold());
             nameTextView[i].setLeftDrawableTopPadding(-dp(1.3f));
             nameTextView[i].setScrollNonFitText(true);
             nameTextView[i].setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -402,7 +401,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
         selectedTextView.setTextSize(dp(20));
         selectedTextView.setGravity(Gravity.LEFT);
         selectedTextView.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
-        selectedTextView.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+        selectedTextView.setTypeface(AndroidUtilities.bold());
         avatarContainer.addView(selectedTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.FILL_HORIZONTAL | Gravity.CENTER_VERTICAL, 72 + (hasAvatar ? 48 : 0), -2, 72, 0));
 
         if (type == TYPE_STORIES) {
@@ -438,7 +437,6 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
                     }
                 }
                 sharedMediaLayout.closeActionMode(false);
-                sharedMediaLayout.disableScroll(false);
                 if (pin) {
                     sharedMediaLayout.scrollToPage(SharedMediaLayout.TAB_STORIES);
                 }
@@ -559,6 +557,10 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
 
             @Override
             protected boolean isStoriesView() {
+                return type == TYPE_STORIES || type == TYPE_ARCHIVED_CHANNEL_STORIES;
+            }
+
+            protected boolean customTabs() {
                 return type == TYPE_STORIES || type == TYPE_ARCHIVED_CHANNEL_STORIES;
             }
 
@@ -1059,7 +1061,7 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
 
     @Override
     public boolean isLightStatusBar() {
-        if (storyViewer != null && storyViewer.isShown()) {
+        if (getLastStoryViewer() != null && getLastStoryViewer().isShown()) {
             return false;
         }
         int color = Theme.getColor(Theme.key_windowBackgroundWhite);
@@ -1088,11 +1090,9 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
         @Override
         public Tab[] createTabs() {
             Tab[] tabs = new Tab[] {
-                    new Tab(0, R.raw.msg_stories_saved, LocaleController.getString("ProfileMyStoriesTab", R.string.ProfileMyStoriesTab)),
-                    new Tab(1, R.raw.msg_stories_archive, LocaleController.getString("ProfileStoriesArchiveTab", R.string.ProfileStoriesArchiveTab))
+                new Tab(0, R.raw.msg_stories_saved, 20, 40, LocaleController.getString("ProfileMyStoriesTab", R.string.ProfileMyStoriesTab)),
+                new Tab(1, R.raw.msg_stories_archive, 0, 0, LocaleController.getString("ProfileStoriesArchiveTab", R.string.ProfileStoriesArchiveTab))
             };
-            tabs[0].customEndFrameMid = 20;
-            tabs[0].customEndFrameEnd = 40;
             return tabs;
         }
     }
@@ -1100,8 +1100,8 @@ public class MediaActivity extends BaseFragment implements SharedMediaLayout.Sha
     @Override
     public int getNavigationBarColor() {
         int color = getThemedColor(Theme.key_windowBackgroundWhite);
-        if (storyViewer != null && storyViewer.attachedToParent()) {
-            return storyViewer.getNavigationBarColor(color);
+        if (getLastStoryViewer() != null && getLastStoryViewer().attachedToParent()) {
+            return getLastStoryViewer().getNavigationBarColor(color);
         }
         return color;
     }

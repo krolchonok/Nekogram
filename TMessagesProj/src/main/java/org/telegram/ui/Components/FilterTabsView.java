@@ -29,7 +29,6 @@ import android.text.SpannableStringBuilder;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
-import android.util.Log;
 import android.util.Property;
 import android.util.SparseIntArray;
 import android.view.HapticFeedbackConstants;
@@ -151,12 +150,11 @@ public class FilterTabsView extends FrameLayout {
         }
 
         public boolean setTitle(String newTitle) {
-            newTitle = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? newTitle : "";
             realTitle = newTitle;
-            if (TextUtils.equals(title, newTitle)) {
+            if (TextUtils.equals(realTitle, newTitle)) {
                 return false;
             }
-            title = newTitle;
+            title = NekoConfig.tabsTitleType != NekoConfig.TITLE_TYPE_ICON ? newTitle : "";
             return true;
         }
     }
@@ -929,9 +927,9 @@ public class FilterTabsView extends FrameLayout {
     public FilterTabsView(Context context) {
         super(context);
         textCounterPaint.setTextSize(AndroidUtilities.dp(13));
-        textCounterPaint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+        textCounterPaint.setTypeface(AndroidUtilities.bold());
         textPaint.setTextSize(AndroidUtilities.dp(15));
-        textPaint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
+        textPaint.setTypeface(AndroidUtilities.bold());
         deletePaint.setStyle(Paint.Style.STROKE);
         deletePaint.setStrokeCap(Paint.Cap.ROUND);
         deletePaint.setStrokeWidth(AndroidUtilities.dp(1.5f));
@@ -1551,8 +1549,14 @@ public class FilterTabsView extends FrameLayout {
         invalidate();
         scrollToChild(position);
 
+        if (manualScrollingToPosition != currentPosition) {
+            if (progress > 0.7f) {
+                delegate.onTabSelected(tabs.get(position), currentPosition < position, true);
+            } else if (progress < 0.3f) {
+                delegate.onTabSelected(tabs.get(currentPosition), currentPosition > position, true);
+            }
+        }
         if (progress >= 1.0f) {
-            if (manualScrollingToPosition != currentPosition) delegate.onTabSelected(tabs.get(position), currentPosition < position, true);
             manualScrollingToPosition = -1;
             manualScrollingToId = -1;
             currentPosition = position;

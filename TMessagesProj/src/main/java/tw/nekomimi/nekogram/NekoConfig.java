@@ -29,6 +29,7 @@ import app.nekogram.translator.DeepLTranslator;
 import tw.nekomimi.nekogram.helpers.AnalyticsHelper;
 import tw.nekomimi.nekogram.helpers.CloudSettingsHelper;
 import tw.nekomimi.nekogram.translator.Translator;
+import tw.nekomimi.nekogram.translator.TranslatorApps;
 
 public class NekoConfig {
     //TODO: refactor
@@ -62,7 +63,7 @@ public class NekoConfig {
     public static final int BOOST_EXTREME = 2;
 
     private static final Object sync = new Object();
-    public static boolean useIPv6 = false;
+    public static boolean preferIPv6 = false;
 
     public static boolean useSystemEmoji = false;
     public static boolean ignoreBlocked = false;
@@ -83,9 +84,11 @@ public class NekoConfig {
     public static int idType = ID_TYPE_API;
     public static int maxRecentStickers = 20;
     public static int transType = TRANS_TYPE_NEKO;
-    public static int doubleTapAction = DOUBLE_TAP_ACTION_REACTION;
+    public static int doubleTapInAction = DOUBLE_TAP_ACTION_REACTION;
+    public static int doubleTapOutAction = DOUBLE_TAP_ACTION_REACTION;
     public static int downloadSpeedBoost = BOOST_NONE;
     public static HashSet<String> restrictedLanguages = new HashSet<>();
+    public static String externalTranslationProvider;
 
     public static boolean showAddToSavedMessages = true;
     public static boolean showSetReminder = false;
@@ -131,6 +134,8 @@ public class NekoConfig {
     public static boolean quickForward = false;
     public static boolean reducedColors = false;
     public static boolean ignoreContentRestriction = false;
+    public static boolean fixLinkPreview = false;
+    public static boolean showTimeHint = false;
 
     public static boolean springAnimation = false;
 
@@ -140,7 +145,6 @@ public class NekoConfig {
     public static boolean residentNotification = false;
 
     public static boolean shouldNOTTrustMe = false;
-    public static boolean blockSponsoredMessage = false;
 
     public static boolean isChineseUser = false;
 
@@ -169,7 +173,7 @@ public class NekoConfig {
             isChineseUser = ApplicationLoader.applicationContext.getResources().getBoolean(R.bool.isChineseUser);
 
             SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
-            useIPv6 = preferences.getBoolean("useIPv6", false);
+            preferIPv6 = preferences.getBoolean("preferIPv6", false);
             hidePhone = preferences.getBoolean("hidePhone", true);
             ignoreBlocked = preferences.getBoolean("ignoreBlocked2", false);
             tabletMode = preferences.getInt("tabletMode", TABLET_AUTO);
@@ -199,7 +203,6 @@ public class NekoConfig {
             confirmAVMessage = preferences.getBoolean("confirmAVMessage", false);
             askBeforeCall = preferences.getBoolean("askBeforeCall", true);
             shouldNOTTrustMe = preferences.getBoolean("shouldNOTTrustMe", false);
-            blockSponsoredMessage = preferences.getBoolean("blockSponsoredMessage", false);
             disableNumberRounding = preferences.getBoolean("disableNumberRounding", false);
             disableAppBarShadow = preferences.getBoolean("disableAppBarShadow", false);
             mediaPreview = preferences.getBoolean("mediaPreview", true);
@@ -223,7 +226,8 @@ public class NekoConfig {
             disableVoiceMessageAutoPlay = preferences.getBoolean("disableVoiceMessageAutoPlay", false);
             transType = preferences.getInt("transType", TRANS_TYPE_NEKO);
             showCopyPhoto = preferences.getBoolean("showCopyPhoto", false);
-            doubleTapAction = preferences.getInt("doubleTapAction", DOUBLE_TAP_ACTION_REACTION);
+            doubleTapInAction = preferences.getInt("doubleTapAction", DOUBLE_TAP_ACTION_REACTION);
+            doubleTapOutAction = preferences.getInt("doubleTapOutAction", doubleTapInAction);
             restrictedLanguages = new HashSet<>(preferences.getStringSet("restrictedLanguages", new HashSet<>()));
             disableMarkdownByDefault = preferences.getBoolean("disableMarkdownByDefault", false);
             showRPCError = preferences.getBoolean("showRPCError", false);
@@ -240,6 +244,10 @@ public class NekoConfig {
             springAnimation = preferences.getBoolean("springAnimation", false);
             reducedColors = preferences.getBoolean("reducedColors", false);
             ignoreContentRestriction = preferences.getBoolean("ignoreContentRestriction", false);
+            fixLinkPreview = preferences.getBoolean("fixLinkPreview", false);
+            externalTranslationProvider = preferences.getString("externalTranslationProvider", "");
+            TranslatorApps.loadTranslatorAppsAsync();
+            showTimeHint = preferences.getBoolean("showTimeHint", false);
 
             preferences.registerOnSharedPreferenceChangeListener(listener);
 
@@ -309,6 +317,14 @@ public class NekoConfig {
         loadConfig(true);
     }
 
+    public static void setExternalTranslationProvider(String provider) {
+        externalTranslationProvider = provider;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("externalTranslationProvider", externalTranslationProvider);
+        editor.apply();
+    }
+
     public static void setWsDomain(String domain) {
         wsDomain = domain;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -332,11 +348,19 @@ public class NekoConfig {
         editor.apply();
     }
 
-    public static void setDoubleTapAction(int action) {
-        doubleTapAction = action;
+    public static void setDoubleTapInAction(int action) {
+        doubleTapInAction = action;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putInt("doubleTapAction", doubleTapAction);
+        editor.putInt("doubleTapAction", doubleTapInAction);
+        editor.apply();
+    }
+
+    public static void setDoubleTapOutAction(int action) {
+        doubleTapOutAction = action;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("doubleTapOutAction", doubleTapOutAction);
         editor.apply();
     }
 
@@ -353,6 +377,22 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt("downloadSpeedBoost2", boost);
+        editor.apply();
+    }
+
+    public static void toggleShowTimeHint() {
+        showTimeHint = !showTimeHint;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("showTimeHint", showTimeHint);
+        editor.apply();
+    }
+
+    public static void toggleFixLinkPreview() {
+        fixLinkPreview = !fixLinkPreview;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("fixLinkPreview", fixLinkPreview);
         editor.apply();
     }
 
@@ -526,10 +566,10 @@ public class NekoConfig {
     }
 
     public static void toggleIPv6() {
-        useIPv6 = !useIPv6;
+        preferIPv6 = !preferIPv6;
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
-        editor.putBoolean("useIPv6", useIPv6);
+        editor.putBoolean("preferIPv6", preferIPv6);
         editor.apply();
     }
 
@@ -874,8 +914,7 @@ public class NekoConfig {
     public static void processBotEvents(String eventType, String eventData, Utilities.Callback<JSONObject> setConfig) throws JSONException {
         if (eventType.equals("neko_get_config")) {
             setConfig.run(new JSONObject()
-                    .put("trust", !shouldNOTTrustMe)
-                    .put("ad_blocker", blockSponsoredMessage));
+                    .put("trust", !shouldNOTTrustMe));
         } else if (eventType.equals("neko_set_config")) {
             JSONObject jsonObject = new JSONObject(eventData);
             SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
@@ -884,10 +923,6 @@ public class NekoConfig {
                 case "trust":
                     shouldNOTTrustMe = !jsonObject.getBoolean("value");
                     editor.putBoolean("shouldNOTTrustMe", shouldNOTTrustMe);
-                    break;
-                case "ad_blocker":
-                    blockSponsoredMessage = jsonObject.getBoolean("value");
-                    editor.putBoolean("blockSponsoredMessage", blockSponsoredMessage);
                     break;
             }
             editor.apply();

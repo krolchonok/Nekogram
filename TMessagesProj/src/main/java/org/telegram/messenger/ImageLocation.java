@@ -239,10 +239,9 @@ public class ImageLocation {
             return null;
         }
         ImageLocation imageLocation = getForPhoto(photoSize.location, photoSize.size, null, null, null, TYPE_SMALL, sticker.dc_id, stickerSet, photoSize.type);
-        if (MessageObject.isAnimatedStickerDocument(sticker, true)) {
+        if (photoSize.type.equalsIgnoreCase("a")) {
             imageLocation.imageType = FileLoader.IMAGE_TYPE_LOTTIE;
-        }
-        if (MessageObject.isVideoSticker(sticker)) {
+        } else if (photoSize.type.equalsIgnoreCase("v")) {
             imageLocation.imageType = FileLoader.IMAGE_TYPE_ANIMATION;
         }
         imageLocation.thumbVersion = thumbVersion;
@@ -296,6 +295,22 @@ public class ImageLocation {
         imageLocation.location.secret = location.secret;
         imageLocation.location.dc_id = location.dc_id;
         return imageLocation;
+    }
+
+    public static ImageLocation getForStickerSet(TLRPC.StickerSet set) {
+        if (set == null) return null;
+        TLRPC.PhotoSize photoSize = FileLoader.getClosestPhotoSizeWithSize(set.thumbs, 90);
+        if (photoSize == null) return null;
+        TLRPC.InputStickerSet inputStickerSet;
+        if (set.access_hash != 0) {
+            inputStickerSet = new TLRPC.TL_inputStickerSetID();
+            inputStickerSet.id = set.id;
+            inputStickerSet.access_hash = set.access_hash;
+        } else {
+            inputStickerSet = new TLRPC.TL_inputStickerSetShortName();
+            inputStickerSet.short_name = set.short_name;
+        }
+        return getForPhoto(photoSize.location, photoSize.size, null, null, null, TYPE_SMALL, photoSize.location.dc_id, inputStickerSet, photoSize.type);
     }
 
     private static ImageLocation getForPhoto(TLRPC.FileLocation location, int size, TLRPC.Photo photo, TLRPC.Document document, TLRPC.InputPeer photoPeer, int photoPeerType, int dc_id, TLRPC.InputStickerSet stickerSet, String thumbSize) {

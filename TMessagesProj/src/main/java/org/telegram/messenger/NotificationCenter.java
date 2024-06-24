@@ -46,6 +46,7 @@ public class NotificationCenter {
     public static final int loadingMessagesFailed = totalEvents++;
     public static final int messageReceivedByAck = totalEvents++;
     public static final int messageReceivedByServer = totalEvents++;
+    public static final int messageReceivedByServer2 = totalEvents++;
     public static final int messageSendError = totalEvents++;
     public static final int forceImportContactsStart = totalEvents++;
     public static final int contactsDidLoad = totalEvents++;
@@ -94,6 +95,7 @@ public class NotificationCenter {
     public static final int pinnedInfoDidLoad = totalEvents++;
     public static final int botKeyboardDidLoad = totalEvents++;
     public static final int chatSearchResultsAvailable = totalEvents++;
+    public static final int hashtagSearchUpdated = totalEvents++;
     public static final int chatSearchResultsLoading = totalEvents++;
     public static final int musicDidLoad = totalEvents++;
     public static final int moreMusicDidLoad = totalEvents++;
@@ -143,6 +145,10 @@ public class NotificationCenter {
     public static final int businessMessagesUpdated = totalEvents++;
     public static final int quickRepliesUpdated = totalEvents++;
     public static final int quickRepliesDeleted = totalEvents++;
+
+    public static final int businessLinksUpdated = totalEvents++;
+    public static final int businessLinkCreated = totalEvents++;
+    public static final int needDeleteBusinessLink = totalEvents++;
 
     public static final int messageTranslated = totalEvents++;
     public static final int messageTranslating = totalEvents++;
@@ -242,6 +248,13 @@ public class NotificationCenter {
     public static final int chatWasBoostedByUser = totalEvents++;
     public static final int groupPackUpdated = totalEvents++;
     public static final int timezonesUpdated = totalEvents++;
+    public static final int customStickerCreated = totalEvents++;
+    public static final int premiumFloodWaitReceived = totalEvents++;
+    public static final int availableEffectsUpdate = totalEvents++;
+    public static final int starOptionsLoaded = totalEvents++;
+    public static final int starBalanceUpdated = totalEvents++;
+    public static final int starTransactionsLoaded = totalEvents++;
+    public static final int factCheckLoaded = totalEvents++;
 
     //global
     public static final int pushMessagesUpdated = totalEvents++;
@@ -755,7 +768,7 @@ public class NotificationCenter {
         }
     }
 
-    public Runnable listen(View view, final int id, final Utilities.Callback<Object[]> callback) {
+    public Runnable listenGlobal(View view, final int id, final Utilities.Callback<Object[]> callback) {
         if (view == null || callback == null) {
             return () -> {};
         }
@@ -782,8 +795,35 @@ public class NotificationCenter {
         };
     }
 
+    public Runnable listen(View view, final int id, final Utilities.Callback<Object[]> callback) {
+        if (view == null || callback == null) {
+            return () -> {};
+        }
+        final NotificationCenterDelegate delegate = (_id, account, args) -> {
+            if (_id == id) {
+                callback.run(args);
+            }
+        };
+        final View.OnAttachStateChangeListener viewListener = new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View view) {
+                addObserver(delegate, id);
+            }
+            @Override
+            public void onViewDetachedFromWindow(View view) {
+                removeObserver(delegate, id);
+            }
+        };
+        view.addOnAttachStateChangeListener(viewListener);
+
+        return () -> {
+            view.removeOnAttachStateChangeListener(viewListener);
+            removeObserver(delegate, id);
+        };
+    }
+
     public static void listenEmojiLoading(View view) {
-        getGlobalInstance().listen(view, NotificationCenter.emojiLoaded, args -> view.invalidate());
+        getGlobalInstance().listenGlobal(view, NotificationCenter.emojiLoaded, args -> view.invalidate());
     }
 
     public void listenOnce(int id, Runnable callback) {
