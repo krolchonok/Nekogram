@@ -195,7 +195,7 @@ public class CameraScanActivity extends BaseFragment {
         if (parentActivity == null) {
             return null;
         }
-        INavigationLayout[] actionBarLayout = new INavigationLayout[]{INavigationLayout.newLayout(parentActivity)};
+        INavigationLayout[] actionBarLayout = new INavigationLayout[]{INavigationLayout.newLayout(parentActivity, false)};
         BottomSheet bottomSheet = new BottomSheet(parentActivity, false) {
             CameraScanActivity fragment;
             {
@@ -697,7 +697,7 @@ public class CameraScanActivity extends BaseFragment {
                             return;
                         }
                     }
-                    ChatAttachAlert chatAttachAlert = new ChatAttachAlert(getParentActivity(), this, true, false, false, new DarkThemeResourceProvider());
+                    ChatAttachAlert chatAttachAlert = new ChatAttachAlert(getParentActivity(), this, false, false, false, new DarkThemeResourceProvider());
                     chatAttachAlert.drawNavigationBar = true;
                     chatAttachAlert.setupPhotoPicker(LocaleController.getString("ChoosePhoto", R.string.ChoosePhoto));
                     chatAttachAlert.setDelegate(new ChatAttachAlert.ChatAttachViewDelegate() {

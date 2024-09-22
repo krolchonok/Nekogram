@@ -41,6 +41,7 @@ public interface INavigationLayout {
     void setFragmentStackChangedListener(Runnable onFragmentStackChanged);
     boolean isTransitionAnimationInProgress();
     void resumeDelayedFragmentAnimation();
+    boolean allowSwipe();
 
     boolean isInPassivePreviewMode();
     void setInBubbleMode(boolean bubbleMode);
@@ -80,12 +81,12 @@ public interface INavigationLayout {
     List<BackButtonMenu.PulledDialog> getPulledDialogs();
     void setPulledDialogs(List<BackButtonMenu.PulledDialog> pulledDialogs);
 
-    static INavigationLayout newLayout(Context context) {
-        return new ActionBarLayout(context);
+    static INavigationLayout newLayout(Context context, boolean main) {
+        return new ActionBarLayout(context, main);
     }
 
-    static INavigationLayout newLayout(Context context, Supplier<BottomSheet> supplier) {
-        return new ActionBarLayout(context) {
+    static INavigationLayout newLayout(Context context, boolean main, Supplier<BottomSheet> supplier) {
+        return new ActionBarLayout(context, main) {
             @Override
             public BottomSheet getBottomSheet() {
                 return supplier.get();
@@ -435,6 +436,15 @@ public interface INavigationLayout {
         }
     }
 
+    void setNavigationBarColor(int color);
+
+    default int getBottomTabsHeight(boolean animated) {
+        return 0;
+    }
+
+    default BottomSheetTabs getBottomSheetTabs() {
+        return null;
+    }
     enum BackButtonState {
         BACK,
         MENU

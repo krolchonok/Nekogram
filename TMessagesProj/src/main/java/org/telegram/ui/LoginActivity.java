@@ -1793,7 +1793,9 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                 final String phone = params.getString("phoneFormated");
                 if (r.play_integrity_nonce != null) {
                     IntegrityManager integrityManager = IntegrityManagerFactory.create(getContext());
-                    Task<IntegrityTokenResponse> integrityTokenResponse = integrityManager.requestIntegrityToken(IntegrityTokenRequest.builder().setNonce(Utilities.bytesToHex(r.play_integrity_nonce)).setCloudProjectNumber(760348033671L).build());
+                    final String nonce = new String(Base64.encode(r.play_integrity_nonce, Base64.URL_SAFE));
+                    FileLog.d("getting classic integrity with nonce = " + nonce);
+                    Task<IntegrityTokenResponse> integrityTokenResponse = integrityManager.requestIntegrityToken(IntegrityTokenRequest.builder().setNonce(nonce).setCloudProjectNumber(r.play_integrity_project_id).build());
                     integrityTokenResponse
                         .addOnSuccessListener(result -> {
                             final String token = result.token();
@@ -2884,7 +2886,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         currentDoneType = DONE_TYPE_FLOATING;
                         needShowProgress(0, false);
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && AndroidUtilities.isSimAvailable()) {
+                        if (false && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && AndroidUtilities.isSimAvailable()) {
                             boolean allowCall = getParentActivity().checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED;
                             boolean allowCancelCall = getParentActivity().checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
                             boolean allowReadCallLog = Build.VERSION.SDK_INT < Build.VERSION_CODES.P || getParentActivity().checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED;
@@ -2965,7 +2967,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             boolean allowReadCallLog = true;
             boolean allowReadPhoneNumbers = true;
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && simcardAvailable) {
+            if (false && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && simcardAvailable) {
                 allowCall = getParentActivity().checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED;
                 allowCancelCall = getParentActivity().checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
                 allowReadCallLog = Build.VERSION.SDK_INT < Build.VERSION_CODES.P || getParentActivity().checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED;
@@ -5813,7 +5815,12 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
                         .requestIdToken(BuildVars.GOOGLE_AUTH_CLIENT_ID)
                         .requestEmail()
                         .build());
-                googleClient.signOut().addOnCompleteListener(command -> getParentActivity().startActivityForResult(googleClient.getSignInIntent(), BasePermissionsActivity.REQUEST_CODE_SIGN_IN_WITH_GOOGLE));
+                googleClient.signOut().addOnCompleteListener(command -> {
+                    if (getParentActivity() == null || getParentActivity().isFinishing()) {
+                        return;
+                    }
+                    getParentActivity().startActivityForResult(googleClient.getSignInIntent(), BasePermissionsActivity.REQUEST_CODE_SIGN_IN_WITH_GOOGLE);
+                });
             });
         }
 
@@ -9313,7 +9320,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
 
             final int a = currentType == AUTH_TYPE_WORD ? 0 : 1;
             final String formattedPhone = "+" + PhoneFormat.getInstance().format(PhoneFormat.stripExceptNumbers(phone));
-            if (beginning == null) {
+            if (beginning == null || getConnectionsManager().isTestBackend()) {
                 confirmTextView.setText(AndroidUtilities.replaceTags(formatString(a == 0 ? R.string.SMSWordText : R.string.SMSPhraseText, formattedPhone)));
             } else {
                 confirmTextView.setText(AndroidUtilities.replaceTags(formatString(a == 0 ? R.string.SMSWordBeginningText : R.string.SMSPhraseBeginningText, formattedPhone, beginning)));
@@ -9734,7 +9741,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
         }
 
         private boolean beginsOk(String text) {
-            if (beginning == null) {
+            if (beginning == null || getConnectionsManager().isTestBackend()) {
                 return true;
             }
             String lt = trimLeft(text).toLowerCase();
@@ -9795,7 +9802,7 @@ public class LoginActivity extends BaseFragment implements NotificationCenter.No
             }
             actionBar = null;
         }
-        clearStoryViewers();
+        clearSheets();
         parentLayout = null;
     }
 }

@@ -368,8 +368,9 @@ public class ConnectionsManager extends BaseController {
                     if (response != 0) {
                         NativeByteBuffer buff = NativeByteBuffer.wrap(response);
                         buff.reused = true;
+                        int magic = buff.readInt32(true);
                         try {
-                            resp = object.deserializeResponse(buff, buff.readInt32(true), true);
+                            resp = object.deserializeResponse(buff, magic, true);
                         } catch (Exception e2) {
                             if (BuildVars.DEBUG_PRIVATE_VERSION) {
                                 throw e2;
@@ -1445,7 +1446,7 @@ public class ConnectionsManager extends BaseController {
 
     public static long lastPremiumFloodWaitShown = 0;
     public static void onPremiumFloodWait(final int currentAccount, final int requestToken, boolean isUpload) {
-        AndroidUtilities.runOnUIThread(() -> {
+        Utilities.stageQueue.postRunnable(() -> {
             if (UserConfig.selectedAccount != currentAccount) {
                 return;
             }
@@ -1466,15 +1467,15 @@ public class ConnectionsManager extends BaseController {
             }
 
             if (updated) {
-                NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.premiumFloodWaitReceived);
+                AndroidUtilities.runOnUIThread(() -> NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.premiumFloodWaitReceived));
             }
         });
     }
 
-    public static void onIntegrityCheckClassic(final int currentAccount, final int requestToken, final String nonce) {
+    public static void onIntegrityCheckClassic(final int currentAccount, final int requestToken, final String project, final String nonce) {
         AndroidUtilities.runOnUIThread(() -> {
             long start = System.currentTimeMillis();
-            FileLog.d("account"+currentAccount+": server requests integrity classic check with nonce = " + nonce);
+            FileLog.d("account"+currentAccount+": server requests integrity classic check with project = "+project+" nonce = " + nonce);
             native_receivedIntegrityCheckClassic(currentAccount, requestToken, nonce, "PLAYINTEGRITY_FAILED_EXCEPTION_NULL");
         });
     }

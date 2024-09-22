@@ -130,20 +130,17 @@ target_include_directories(rlottie PUBLIC
         rlottie/src/vector/stb)
 
 if (${ANDROID_ABI} STREQUAL "armeabi-v7a")
-    target_compile_options(rlottie PUBLIC
-            -fno-integrated-as)
     target_compile_definitions(rlottie PUBLIC
             USE_ARM_NEON)
     target_sources(rlottie PRIVATE
             rlottie/src/vector/pixman/pixman-arm-neon-asm.S)
 elseif(${ANDROID_ABI} STREQUAL "arm64-v8a")
-    target_compile_options(rlottie PUBLIC
-            -fno-integrated-as)
     target_compile_definitions(rlottie PUBLIC
             USE_ARM_NEON __ARM64_NEON__)
     target_sources(rlottie PRIVATE
             rlottie/src/vector/pixman/pixman-arma64-neon-asm.S)
 endif()
+
 
 #flac
 add_library(flac STATIC
@@ -220,7 +217,8 @@ add_library(${NATIVE_LIB} SHARED
         exoplayer/ffmpeg_jni.cc
         fast-edge.cpp
         genann.c
-        secureid_ocr.cpp)
+        secureid_ocr.cpp
+)
 
 target_compile_options(${NATIVE_LIB} PUBLIC
         -ffast-math -Os -funroll-loops -ffast-math -fno-strict-aliasing -fno-math-errno)

@@ -54,6 +54,7 @@ import java.util.Locale;
 
 import tw.nekomimi.nekogram.helpers.MessageHelper;
 import tw.nekomimi.nekogram.helpers.UserHelper;
+import tw.nekomimi.nekogram.helpers.WebAppHelper;
 import tw.nekomimi.nekogram.settings.BaseNekoSettingsActivity;
 
 @SuppressLint({"RtlHardcoded", "NotifyDataSetChanged"})
@@ -276,7 +277,7 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
                 presentFragment(fragment);
             }
         } else if (position == restrictionReasonRow) {
-            ArrayList<TLRPC.TL_restrictionReason> reasons = messageObject.messageOwner.restriction_reason;
+            ArrayList<TLRPC.RestrictionReason> reasons = messageObject.messageOwner.restriction_reason;
             LinearLayout ll = new LinearLayout(getParentActivity());
             ll.setOrientation(LinearLayout.VERTICAL);
 
@@ -284,7 +285,7 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
                     .setView(ll)
                     .create();
 
-            for (TLRPC.TL_restrictionReason reason : reasons) {
+            for (TLRPC.RestrictionReason reason : reasons) {
                 TextDetailSettingsCell cell = new TextDetailSettingsCell(getParentActivity(), resourcesProvider);
                 cell.setBackground(Theme.getSelectorDrawable(false));
                 cell.setMultilineDetail(true);
@@ -349,17 +350,18 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
             }
 
             showDialog(dialog);
+        } else if (position == exportRow) {
+            WebAppHelper.openTLViewer(this, messageObject);
         }
     }
 
     @Override
     protected boolean onItemLongClick(View view, int position, float x, float y) {
         var type = listAdapter.getItemViewType(position);
-        if (type != TYPE_SHADOW) {
+        if (type != TYPE_SHADOW && position != exportRow) {
             if (!noforwards || !(position == messageRow || position == captionRow || position == filePathRow)) {
                 CharSequence text;
-                if (view instanceof TextDetailSettingsCell) {
-                    TextDetailSettingsCell textCell = (TextDetailSettingsCell) view;
+                if (view instanceof TextDetailSettingsCell textCell) {
                     text = textCell.getValueTextView().getText();
                 } else {
                     TextDetailSimpleCell textCell = (TextDetailSimpleCell) view;
@@ -413,9 +415,9 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
         languageRow = TextUtils.isEmpty(getMessageHelper().getMessagePlainText(messageObject)) ? -1 : rowCount++;
         getMessageHelper();
         linkOrEmojiOnlyRow = !TextUtils.isEmpty(messageObject.messageOwner.message) && MessageHelper.isLinkOrEmojiOnlyMessage(messageObject) ? rowCount++ : -1;
-        emptyRow = -1;//rowCount++;
+        emptyRow = rowCount++;
 
-        exportRow = -1;//rowCount++;
+        exportRow = rowCount++;
         endRow = rowCount++;
     }
 
@@ -506,9 +508,9 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
                     } else if (position == dcRow) {
                         textCell.setTextAndValue("DC", UserHelper.formatDCString(dc), divider);
                     } else if (position == restrictionReasonRow) {
-                        ArrayList<TLRPC.TL_restrictionReason> reasons = messageObject.messageOwner.restriction_reason;
+                        ArrayList<TLRPC.RestrictionReason> reasons = messageObject.messageOwner.restriction_reason;
                         StringBuilder value = new StringBuilder();
-                        for (TLRPC.TL_restrictionReason reason : reasons) {
+                        for (TLRPC.RestrictionReason reason : reasons) {
                             value.append(reason.reason);
                             value.append("-");
                             value.append(reason.platform);
@@ -559,9 +561,9 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
                 case TYPE_CREATION: {
                     CreationTextCell creationTextCell = (CreationTextCell) holder.itemView;
                     if (position == exportRow) {
-                        Drawable drawable = creationTextCell.getContext().getResources().getDrawable(R.drawable.msg_copy);
+                        Drawable drawable = creationTextCell.getContext().getResources().getDrawable(R.drawable.msg_search);
                         drawable.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_switchTrackChecked), PorterDuff.Mode.MULTIPLY));
-                        creationTextCell.setTextAndIcon(LocaleController.getString(R.string.ExportAsJson), drawable, divider);
+                        creationTextCell.setTextAndIcon(LocaleController.getString(R.string.ViewAsJson), drawable, divider);
                     }
                     break;
                 }
@@ -612,7 +614,7 @@ public class MessageDetailsActivity extends BaseNekoSettingsActivity implements 
             if (timestamp == 0x7ffffffe) {
                 return "When online";
             } else {
-                return timestamp + "\n" + LocaleController.formatString(R.string.formatDateAtTime, LocaleController.getInstance().formatterYear.format(new Date(timestamp * 1000L)), LocaleController.getInstance().formatterDayWithSeconds.format(new Date(timestamp * 1000L)));
+                return timestamp + "\n" + LocaleController.formatString(R.string.formatDateAtTime, LocaleController.getInstance().getFormatterYear().format(new Date(timestamp * 1000L)), LocaleController.getInstance().getFormatterDayWithSeconds().format(new Date(timestamp * 1000L)));
             }
         }
     }

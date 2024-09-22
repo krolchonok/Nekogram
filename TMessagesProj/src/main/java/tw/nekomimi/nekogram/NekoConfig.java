@@ -28,6 +28,7 @@ import java.util.function.BiConsumer;
 import app.nekogram.translator.DeepLTranslator;
 import tw.nekomimi.nekogram.helpers.AnalyticsHelper;
 import tw.nekomimi.nekogram.helpers.CloudSettingsHelper;
+import tw.nekomimi.nekogram.helpers.LensHelper;
 import tw.nekomimi.nekogram.translator.Translator;
 import tw.nekomimi.nekogram.translator.TranslatorApps;
 
@@ -62,6 +63,10 @@ public class NekoConfig {
     public static final int BOOST_AVERAGE = 1;
     public static final int BOOST_EXTREME = 2;
 
+    public static final int TRANSCRIBE_AUTO = 0;
+    public static final int TRANSCRIBE_PREMIUM = 1;
+    public static final int TRANSCRIBE_WORKERSAI = 2;
+
     private static final Object sync = new Object();
     public static boolean preferIPv6 = false;
 
@@ -89,6 +94,9 @@ public class NekoConfig {
     public static int downloadSpeedBoost = BOOST_NONE;
     public static HashSet<String> restrictedLanguages = new HashSet<>();
     public static String externalTranslationProvider;
+    public static int transcribeProvider = TRANSCRIBE_PREMIUM;
+    public static String cfAccountID = "";
+    public static String cfApiToken = "";
 
     public static boolean showAddToSavedMessages = true;
     public static boolean showSetReminder = false;
@@ -236,7 +244,7 @@ public class NekoConfig {
             newMarkdownParser = preferences.getBoolean("newMarkdownParser", true);
             markdownParseLinks = preferences.getBoolean("markdownParseLinks", true);
             downloadSpeedBoost = preferences.getInt("downloadSpeedBoost2", BOOST_NONE);
-            sendLargePhotos = preferences.getBoolean("sendLargePhotos", true);
+            sendLargePhotos = preferences.getBoolean("sendLargePhotos", false);
             showQrCode = preferences.getBoolean("showQrCode", true);
             wsDomain = preferences.getString("wsDomain", "");
             hideStories = preferences.getBoolean("hideStories", false);
@@ -248,7 +256,11 @@ public class NekoConfig {
             externalTranslationProvider = preferences.getString("externalTranslationProvider", "");
             TranslatorApps.loadTranslatorAppsAsync();
             showTimeHint = preferences.getBoolean("showTimeHint", false);
+            transcribeProvider = preferences.getInt("transcribeProvider", TRANSCRIBE_PREMIUM);
+            cfAccountID = preferences.getString("cfAccountID", "");
+            cfApiToken = preferences.getString("cfApiToken", "");
 
+            LensHelper.checkLensSupportAsync();
             preferences.registerOnSharedPreferenceChangeListener(listener);
 
             if (!configLoaded) {
@@ -315,6 +327,30 @@ public class NekoConfig {
         });
         editor.apply();
         loadConfig(true);
+    }
+
+    public static void setTranscribeProvider(int provider) {
+        transcribeProvider = provider;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putInt("transcribeProvider", transcribeProvider);
+        editor.apply();
+    }
+
+    public static void setCfAccountID(String accountID) {
+        cfAccountID = accountID;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("cfAccountID", cfAccountID);
+        editor.apply();
+    }
+
+    public static void setCfApiToken(String apiToken) {
+        cfApiToken = apiToken;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("cfApiToken", cfApiToken);
+        editor.apply();
     }
 
     public static void setExternalTranslationProvider(String provider) {

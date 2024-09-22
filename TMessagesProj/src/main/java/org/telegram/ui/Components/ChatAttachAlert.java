@@ -8,6 +8,7 @@
 
 package org.telegram.ui.Components;
 
+import static org.telegram.messenger.LocaleController.formatPluralString;
 import static org.telegram.messenger.LocaleController.getString;
 
 import android.Manifest;
@@ -101,6 +102,7 @@ import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.AdjustPanLayoutHelper;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
@@ -122,9 +124,10 @@ import org.telegram.ui.PhotoPickerSearchActivity;
 import org.telegram.ui.PhotoViewer;
 import org.telegram.ui.PremiumPreviewFragment;
 import org.telegram.ui.Stars.StarsController;
+import org.telegram.ui.Stars.StarsIntroActivity;
 import org.telegram.ui.Stories.recorder.StoryEntry;
 import org.telegram.ui.WebAppDisclaimerAlert;
-import org.telegram.ui.bots.BotWebViewContainer;
+import org.telegram.ui.web.BotWebViewContainer;
 import org.telegram.ui.bots.BotWebViewMenuContainer;
 import org.telegram.ui.bots.ChatAttachAlertBotWebViewLayout;
 
@@ -204,6 +207,11 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     }
 
                     @Override
+                    public void onWebAppSwipingBehavior(boolean allowSwipes) {
+                        webViewLayout.setAllowSwipes(allowSwipes);
+                    }
+
+                    @Override
                     public void onCloseRequested(Runnable callback) {
                         if (currentAttachLayout != webViewLayout) {
                             return;
@@ -220,7 +228,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     }
 
                     @Override
-                    public void onWebAppSetActionBarColor(int color, boolean isOverrideColor) {
+                    public void onWebAppSetActionBarColor(int colorKey, int color, boolean isOverrideColor) {
                         int from = ((ColorDrawable) actionBar.getBackground()).getColor();
                         int to = color;
 
@@ -255,7 +263,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                         if (response instanceof TLRPC.TL_payments_paymentFormStars) {
                             final AlertDialog progressDialog = new AlertDialog(getContext(), AlertDialog.ALERT_TYPE_SPINNER);
                             progressDialog.showDelayed(150);
-                            StarsController.getInstance(currentAccount).openPaymentForm(inputInvoice, (TLRPC.TL_payments_paymentFormStars) response, () -> {
+                            StarsController.getInstance(currentAccount).openPaymentForm(null, inputInvoice, (TLRPC.TL_payments_paymentFormStars) response, () -> {
                                 progressDialog.dismiss();
                             }, status -> {
                                 webViewLayout.getWebViewContainer().onInvoiceStatusUpdate(slug, status);
@@ -816,6 +824,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
     protected boolean typeButtonsAvailable;
 
     private boolean stories;
+    public boolean storyMediaPicker;
 
     boolean sendButtonEnabled = true;
     private float sendButtonEnabledProgress = 1f;
@@ -1916,7 +1925,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 if (currentSheetAnimationType == 1) {
                     if (translationY < 0) {
                         currentAttachLayout.setTranslationY(translationY);
-                        if (avatarPicker != 0) {
+                        if (avatarPicker != 0 || storyMediaPicker) {
                             headerView.setTranslationY(baseSelectedTextViewTranslationY + translationY - currentPanTranslationY);
                         }
                         translationY = 0;
@@ -2303,7 +2312,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             }
             if (view instanceof AttachButton) {
                 final Activity activity = lastFragment.getParentActivity();
-                int num = (Integer) view.getTag();
+                int num = view.getTag() instanceof Integer ? (Integer) view.getTag() : -1;
                 if (num == 1) {
                     if (!photosEnabled && !videosEnabled && checkCanRemoveRestrictionsByBoosts()) {
                         return;
@@ -2385,7 +2394,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     }
                 } else if (num == 11) {
                     openQuickRepliesLayout();
-                } else {
+                } else if (view.getTag() instanceof Integer) {
                     delegate.didPressedButton((Integer) view.getTag(), true, true, 0, 0, isCaptionAbove(), false);
                 }
                 int left = view.getLeft();
@@ -2410,7 +2419,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                                 showBotLayout(button.attachMenuBot.bot_id, true);
                                 MediaDataController.getInstance(currentAccount).updateAttachMenuBotsInCache();
                             }), ConnectionsManager.RequestFlagInvokeAfter | ConnectionsManager.RequestFlagFailOnServerErrors);
-                        }, null);
+                        }, null, null);
                     } else {
                         showBotLayout(button.attachMenuBot.bot_id, true);
                     }
@@ -2864,6 +2873,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             boolean hasMessageToEffect = false;
             MessageObject messageWithCaption = null;
 
+            boolean canHaveStars = false;
             ArrayList<MessageObject> messageObjects = new ArrayList<>();
             int id = 0;
             if (currentAttachLayout == photoLayout || currentAttachLayout == photoPreviewLayout) {
@@ -2971,6 +2981,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                             if (messageWithCaption == null && !TextUtils.isEmpty(msg.message)) {
                                 messageWithCaption = messageObject;
                             }
+                            canHaveStars = true;
                         }
                     }
                 }
@@ -3141,6 +3152,34 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                         dismiss();
                     }
                 });
+            }
+            if (canHaveStars && chatActivity != null && ChatObject.isChannelAndNotMegaGroup(chatActivity.getCurrentChat()) && chatActivity.getCurrentChatInfo() != null && chatActivity.getCurrentChatInfo().paid_media_allowed) {
+                ActionBarMenuSubItem item = options.add(R.drawable.menu_feature_paid, getString(R.string.PaidMediaButton), null).getLast();
+                item.setOnClickListener(v -> {
+                    if (photoLayout == null) return;
+                    StarsIntroActivity.showMediaPriceSheet(context, photoLayout.getStarsPrice(), true, (amount, done) -> {
+                        done.run();
+                        photoLayout.setStarsPrice(amount);
+                        if (amount != null && amount > 0) {
+                            item.setText(getString(R.string.PaidMediaPriceButton));
+                            item.setSubtext(formatPluralString("Stars", (int) (long) amount));
+                            messageSendPreview.setStars(amount);
+                        } else {
+                            item.setText(getString(R.string.PaidMediaButton));
+                            item.setSubtext(null);
+                            messageSendPreview.setStars(0);
+                        }
+                    }, resourcesProvider);
+                });
+                long amount = photoLayout.getStarsPrice();
+                if (amount > 0) {
+                    item.setText(getString(R.string.PaidMediaPriceButton));
+                    item.setSubtext(formatPluralString("Stars", (int) amount));
+                } else {
+                    item.setText(getString(R.string.PaidMediaButton));
+                    item.setSubtext(null);
+                }
+                messageSendPreview.setStars(amount);
             }
             options.setupSelectors();
             messageSendPreview.setItemOptions(options);
@@ -3519,6 +3558,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     @Override
                     public void onAnimationEnd(Animator animation) {
                         currentAttachLayout.setAlpha(0.0f);
+                        currentAttachLayout.setTranslationY(AndroidUtilities.dp(78) + t);
+                        ATTACH_ALERT_LAYOUT_TRANSLATION.set(currentAttachLayout, 1.0f);
+                        actionBar.setAlpha(0f);
                         SpringAnimation springAnimation = new SpringAnimation(nextAttachLayout, DynamicAnimation.TRANSLATION_Y, 0);
                         springAnimation.getSpring().setDampingRatio(0.75f);
                         springAnimation.getSpring().setStiffness(500.0f);
@@ -3530,6 +3572,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                             containerView.invalidate();
                         });
                         springAnimation.addEndListener((animation1, canceled, value, velocity) -> {
+                            nextAttachLayout.setTranslationY(0);
+                            nextAttachLayout.onContainerTranslationUpdated(currentPanTranslationY);
+                            containerView.invalidate();
                             onEnd.run();
                             updateSelectedPosition(0);
                         });
@@ -3538,8 +3583,8 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     }
                 });
                 viewChangeAnimator = animator;
-                animator.start();
                 ATTACH_ALERT_LAYOUT_TRANSLATION.set(currentAttachLayout, 0f);
+                animator.start();
             } else {
                 currentAttachLayout.setAlpha(0.0f);
                 onEnd.run();
@@ -4289,7 +4334,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         }
 
         float offset = actionBar.getAlpha() != 0 ? 0.0f : AndroidUtilities.dp(26 * (1.0f - headerView.getAlpha()));
-        if (menuShowed && avatarPicker == 0) {
+        if (menuShowed && avatarPicker == 0 && !storyMediaPicker) {
             selectedMenuItem.setTranslationY(scrollOffset - AndroidUtilities.dp(37 + finalMove * moveProgress) + offset + currentPanTranslationY);
         } else {
             selectedMenuItem.setTranslationY(ActionBar.getCurrentActionBarHeight() - AndroidUtilities.dp(4) - AndroidUtilities.dp(37 + finalMove) + currentPanTranslationY);
@@ -4327,7 +4372,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             }
 
             boolean needsSearchItem = searchItem != null && (avatarSearch || false && currentAttachLayout == photoLayout && !menuShowed && baseFragment instanceof ChatActivity && ((ChatActivity) baseFragment).allowSendGifs() && ((ChatActivity) baseFragment).allowSendPhotos());
-            boolean needMoreItem = !isPhotoPicker && (avatarPicker != 0 || !menuShowed) && currentAttachLayout == photoLayout && (photosEnabled || videosEnabled);
+            boolean needMoreItem = !isPhotoPicker && !storyMediaPicker && (avatarPicker != 0 || !menuShowed) && currentAttachLayout == photoLayout && (photosEnabled || videosEnabled);
             if (currentAttachLayout == restrictedLayout) {
                 needsSearchItem = false;
                 needMoreItem = false;
@@ -4472,15 +4517,15 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         }
         currentAttachLayout.onSelectedItemsCountChanged(count);
 
-        if (currentAttachLayout == photoLayout && ((baseFragment instanceof ChatActivity) || avatarPicker != 0) && (count == 0 && menuShowed || (count != 0 || avatarPicker != 0) && !menuShowed)) {
-            menuShowed = count != 0 || avatarPicker != 0;
+        if (currentAttachLayout == photoLayout && ((baseFragment instanceof ChatActivity) || avatarPicker != 0 || storyMediaPicker) && (count == 0 && menuShowed || (count != 0 || avatarPicker != 0 || storyMediaPicker) && !menuShowed)) {
+            menuShowed = count != 0 || avatarPicker != 0 || storyMediaPicker;
             if (menuAnimator != null) {
                 menuAnimator.cancel();
                 menuAnimator = null;
             }
             boolean needsSearchItem = avatarPicker != 0 && searchItem != null && actionBar.getTag() != null && baseFragment instanceof ChatActivity && ((ChatActivity) baseFragment).allowSendGifs();
             if (menuShowed) {
-                if (avatarPicker == 0) {
+                if (avatarPicker == 0 && !storyMediaPicker) {
                     selectedMenuItem.setVisibility(View.VISIBLE);
                 }
                 headerView.setVisibility(View.VISIBLE);
@@ -4490,7 +4535,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 }
             }
             if (animated == 0) {
-                if (actionBar.getTag() == null && avatarPicker == 0) {
+                if (actionBar.getTag() == null && avatarPicker == 0 && !storyMediaPicker) {
                     selectedMenuItem.setAlpha(menuShowed ? 1.0f : 0.0f);
                 }
                 headerView.setAlpha(menuShowed ? 1.0f : 0.0f);
@@ -4503,7 +4548,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             } else {
                 menuAnimator = new AnimatorSet();
                 ArrayList<Animator> animators = new ArrayList<>();
-                if (actionBar.getTag() == null && avatarPicker == 0) {
+                if (actionBar.getTag() == null && avatarPicker == 0 && !storyMediaPicker) {
                     animators.add(ObjectAnimator.ofFloat(selectedMenuItem, View.ALPHA, menuShowed ? 1.0f : 0.0f));
                 }
                 animators.add(ObjectAnimator.ofFloat(headerView, View.ALPHA, menuShowed ? 1.0f : 0.0f));
@@ -4516,7 +4561,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     public void onAnimationEnd(Animator animation) {
                         menuAnimator = null;
                         if (!menuShowed) {
-                            if (actionBar.getTag() == null && avatarPicker == 0) {
+                            if (actionBar.getTag() == null && avatarPicker == 0 && !storyMediaPicker) {
                                 selectedMenuItem.setVisibility(View.INVISIBLE);
                             }
                             headerView.setVisibility(View.INVISIBLE);
@@ -4614,7 +4659,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
             typeButtonsAvailable = !editingMessageObject.hasValidGroupId();
         } else {
             layoutToSet = photoLayout;
-            typeButtonsAvailable = avatarPicker == 0;
+            typeButtonsAvailable = avatarPicker == 0 && !storyMediaPicker;
             selectedId = 1;
         }
         buttonsRecyclerView.setVisibility(typeButtonsAvailable ? View.VISIBLE : View.GONE);
@@ -4722,9 +4767,9 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                 shadow.setVisibility(View.GONE);
             }
             if (avatarPicker == 2) {
-                selectedTextView.setText(getString("ChoosePhotoOrVideo", R.string.ChoosePhotoOrVideo));
+                selectedTextView.setText(getString(R.string.ChoosePhotoOrVideo));
             } else {
-                selectedTextView.setText(getString("ChoosePhoto", R.string.ChoosePhoto));
+                selectedTextView.setText(getString(R.string.ChoosePhoto));
             }
         } else {
             typeButtonsAvailable = true;
@@ -4734,8 +4779,14 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         }
     }
 
+    public void setStoryMediaPicker() {
+        storyMediaPicker = true;
+        typeButtonsAvailable = false;
+        selectedTextView.setText(getString(R.string.ChoosePhotoOrVideo));
+    }
+
     public void enableStickerMode(Utilities.Callback2<String, TLRPC.InputDocument> customStickerHandler) {
-        selectedTextView.setText(getString("ChoosePhoto", R.string.ChoosePhoto));
+        selectedTextView.setText(getString(R.string.ChoosePhotoForSticker));
         typeButtonsAvailable = false;
         buttonsRecyclerView.setVisibility(View.GONE);
         shadow.setVisibility(View.GONE);
@@ -4771,7 +4822,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         isSoundPicker = true;
         buttonsRecyclerView.setVisibility(View.GONE);
         shadow.setVisibility(View.GONE);
-        selectedTextView.setText(getString("ChoosePhotoOrVideo", R.string.ChoosePhotoOrVideo));
+        selectedTextView.setText(getString(R.string.ChoosePhotoOrVideo));
     }
 
     public void setEmojiPicker() {
@@ -5005,10 +5056,6 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     quickRepliesButton = buttonsCount++;
                 }
                 musicButton = buttonsCount++;
-
-                if (user != null && user.bot) {
-                    contactButton = buttonsCount++;
-                }
             }
             super.notifyDataSetChanged();
         }
